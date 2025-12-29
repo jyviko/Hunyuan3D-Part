@@ -1,10 +1,10 @@
 import os
-import sys
-import torch 
-import torch.nn as nn 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'XPart/partgen'))
-from models import sonata
-from utils.misc import smart_load_model
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+
+from partgen.models import sonata
 
 '''
 This is the P3-SAM model.
@@ -15,7 +15,10 @@ The model is composed of three parts:
 '''
 def build_P3SAM(self): #build p3sam
     ######################## Sonata ########################
-    self.sonata = sonata.load("sonata", repo_id="facebook/sonata", download_root='/root/sonata')
+    sonata_root = os.environ.get("SONATA_ROOT", str(Path.home() / "sonata"))
+    self.sonata = sonata.load(
+        "sonata", repo_id="facebook/sonata", download_root=sonata_root
+    )
     self.mlp = nn.Sequential(
             nn.Linear(1232, 512),
             nn.GELU(),
@@ -122,7 +125,13 @@ def load_state_dict(self,
         # download from huggingface
         print(f'trying to download model from huggingface...')
         from huggingface_hub import hf_hub_download
-        ckpt_path = hf_hub_download(repo_id="tencent/Hunyuan3D-Part", filename="p3sam/p3sam.safetensors", local_dir=os.path.join(os.path.expanduser('~'), '/.cache/p3sam/weights'))
+        cache_root = Path.home() / ".cache" / "p3sam" / "weights"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        ckpt_path = hf_hub_download(
+            repo_id="tencent/Hunyuan3D-Part",
+            filename="p3sam/p3sam.safetensors",
+            local_dir=str(cache_root),
+        )
         print(f'download model from huggingface to: {ckpt_path}')
         from safetensors.torch import load_file
         state_dict = load_file(ckpt_path)

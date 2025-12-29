@@ -1,5 +1,4 @@
 import os
-import sys
 import torch
 import torch.nn as nn
 import numpy as np
@@ -22,10 +21,7 @@ from numba import njit
 #################################
 # Adjust sonata import path
 from ..models import sonata
-
-#################################
-sys.path.append("../P3-SAM")
-from model import build_P3SAM, load_state_dict
+from p3sam.model import build_P3SAM, load_state_dict
 
 
 class YSAM(nn.Module):
@@ -804,7 +800,7 @@ def mesh_sam(
     model,
     mesh,
     save_path,
-    point_num=100000,
+    point_num=30000,
     prompt_num=400,
     save_mid_res=False,
     show_info=False,
@@ -1345,7 +1341,7 @@ class AutoMask:
     def __init__(
         self,
         ckpt_path,
-        point_num=100000,
+        point_num=30000,
         prompt_num=400,
         threshold=0.95,
         post_process=True,

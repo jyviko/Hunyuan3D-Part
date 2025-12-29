@@ -1,5 +1,5 @@
-import os 
-import sys 
+import os
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -9,8 +9,7 @@ import trimesh
 from sklearn.decomposition import PCA
 import time
 
-sys.path.append('..')
-from model import build_P3SAM, load_state_dict
+from p3sam.model import build_P3SAM, load_state_dict
 
 class P3SAM(nn.Module):
     def __init__(self):
@@ -432,7 +431,7 @@ if __name__ == "__main__":
     argparser.add_argument('--ckpt_path', type=str, default=None, help='path to continue ckpt')
     argparser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     argparser.add_argument("--port", default=8080, type=int, help="Port to bind to")
-    argparser.add_argument("--point_num", default=100000, type=int, help="Number of points to sample from the mesh")
+    argparser.add_argument("--point_num", default=30000, type=int, help="Number of points to sample from the mesh")
     argparser.add_argument("--data_dir", default='../assets', type=str, help="Data directory")
     argparser.add_argument("--no_normal", action='store_true', help="Do not use normal information")
     args = argparser.parse_args()

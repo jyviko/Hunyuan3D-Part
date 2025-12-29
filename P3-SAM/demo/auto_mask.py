@@ -1,5 +1,5 @@
 import os
-import sys
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -19,11 +19,10 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from collections import defaultdict
 
-import numba 
+import numba
 from numba import njit
 
-sys.path.append('..')
-from model import build_P3SAM, load_state_dict
+from p3sam.model import build_P3SAM, load_state_dict
 
 class P3SAM(nn.Module):
     def __init__(self):
@@ -758,7 +757,7 @@ def mesh_sam(
     model,
     mesh,
     save_path,
-    point_num=100000,
+    point_num=30000,
     prompt_num=400,
     save_mid_res=False,
     show_info=False,
@@ -1238,7 +1237,7 @@ class AutoMask:
     def __init__(
         self,
         ckpt_path,
-        point_num=100000,
+        point_num=30000,
         prompt_num=400,
         threshold=0.95,
         post_process=True,
@@ -1309,7 +1308,7 @@ if __name__ == '__main__':
     argparser.add_argument('--ckpt_path', type=str, default=None, help='Model path')
     argparser.add_argument('--mesh_path', type=str, default='assets/1.glb', help='Input mesh path')
     argparser.add_argument('--output_path', type=str, default='results/1', help='Output path')
-    argparser.add_argument('--point_num', type=int, default=100000, help='Number of sampled points')
+    argparser.add_argument('--point_num', type=int, default=30000, help='Number of sampled points')
     argparser.add_argument('--prompt_num', type=int, default=400, help='Number of prompts')
     argparser.add_argument('--threshold', type=float, default=0.95, help='Threshold')
     argparser.add_argument('--post_process', type=int, default=0, help='Enable post-processing')

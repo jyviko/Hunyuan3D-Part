@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hunyuan3d-part"
+version = "0.1.0"
+description = "Hunyuan3D Part pipelines: P3-SAM and XPart"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "Tencent Hunyuan"}]
+dependencies = [
+  "torch>=2.1",
+  "numpy>=1.23",
+  "scipy",
+  "tqdm",
+  "trimesh",
+  "scikit-image",
+  "pytorch-lightning",
+  "pyyaml",
+  "omegaconf",
+  "einops",
+  "safetensors",
+  "diffusers",
+  "accelerate",
+  "transformers",
+  "huggingface_hub",
+  "timm",
+  "numba",
+  "pymeshlab",
+  "scikit-learn",
+  "fpsample",
+  "easydict",
+  "addict",
+  "httpx",
+  "joblib",
+  "threadpoolctl",
+  "pybind11",
+  "pillow",
+  "opencv-python",
+  "gradio",
+  "viser",
+]
+
+[project.optional-dependencies]
+cuda = [
+  "flash-attn",
+  "spconv-cu124; platform_system == \"Linux\"",
+]
+pyg = [
+  "torch-scatter",
+  "torch-sparse",
+  "torch-cluster",
+  "torch-spline-conv",
+]
+sonata = [
+  "torch-scatter",
+  "torch-sparse",
+  "torch-cluster",
+  "torch-spline-conv",
+]
+
+[project.scripts]
+xpart-gradio = "partgen.gradio_app:main"
+p3sam-gradio = "p3sam.demo.gradio_demo:main"
+
+[tool.setuptools]
+package-dir = {"" = "XPart", "p3sam" = "P3-SAM"}
+packages = [
+  "partgen",
+  "partgen.bbox_estimator",
+  "partgen.models",
+  "partgen.models.autoencoders",
+  "partgen.models.conditioner",
+  "partgen.models.diffusion",
+  "partgen.models.diffusion.transport",
+  "partgen.models.sonata",
+  "partgen.models.sonata.serialization",
+  "partgen.utils",
+  "p3sam",
+  "p3sam.demo",
+  "p3sam.utils",
+  "p3sam.utils.chamfer3D",
+]
+
+[tool.setuptools.package-data]
+partgen = ["config/*.yaml", "config/*.json"]
+p3sam.demo = ["assets/*.glb"]
+p3sam.utils.chamfer3D = ["*.cu", "*.cpp"]

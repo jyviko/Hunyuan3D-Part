@@ -144,7 +144,7 @@ def get_feat(model, points, normals):
 
 
 @torch.no_grad()
-def get_mask(model, feats, points, point_prompt, iter=1):
+def get_mask(model, feats, points, point_prompt, iter=1, point_chunk=None):
     """
     feats: [N, 512]
     points: [N, 3]
@@ -152,30 +152,110 @@ def get_mask(model, feats, points, point_prompt, iter=1):
     """
     point_num = points.shape[0]
     prompt_num = point_prompt.shape[0]
-    feats = feats.unsqueeze(1)  # [N, 1, 512]
-    feats = feats.repeat(1, prompt_num, 1).cuda()  # [N, K, 512]
-    points = torch.from_numpy(points).float().cuda().unsqueeze(1)  # [N, 1, 3]
-    points = points.repeat(1, prompt_num, 1)  # [N, K, 3]
-    prompt_coord = (
-        torch.from_numpy(point_prompt).float().cuda().unsqueeze(0)
-    )  # [1, K, 3]
-    prompt_coord = prompt_coord.repeat(point_num, 1, 1)  # [N, K, 3]
-    
-    feats = feats.transpose(0, 1)  # [K, N, 512]
-    points = points.transpose(0, 1)  # [K, N, 3]
-    prompt_coord = prompt_coord.transpose(0, 1)  # [K, N, 3]
+    if point_chunk is None or point_chunk >= point_num or iter != 1:
+        feats = feats.unsqueeze(1)  # [N, 1, 512]
+        feats = feats.repeat(1, prompt_num, 1).cuda()  # [N, K, 512]
+        points = torch.from_numpy(points).float().cuda().unsqueeze(1)  # [N, 1, 3]
+        points = points.repeat(1, prompt_num, 1)  # [N, K, 3]
+        prompt_coord = (
+            torch.from_numpy(point_prompt).float().cuda().unsqueeze(0)
+        )  # [1, K, 3]
+        prompt_coord = prompt_coord.repeat(point_num, 1, 1)  # [N, K, 3]
 
-    mask_1, mask_2, mask_3, pred_iou = model(feats, points, prompt_coord, iter)
+        feats = feats.transpose(0, 1)  # [K, N, 512]
+        points = points.transpose(0, 1)  # [K, N, 3]
+        prompt_coord = prompt_coord.transpose(0, 1)  # [K, N, 3]
 
-    mask_1 = mask_1.transpose(0, 1)  # [N, K]
-    mask_2 = mask_2.transpose(0, 1)  # [N, K]
-    mask_3 = mask_3.transpose(0, 1)  # [N, K]
+        mask_1, mask_2, mask_3, pred_iou = model(feats, points, prompt_coord, iter)
 
-    mask_1 = mask_1.detach().cpu().numpy() > 0.5
-    mask_2 = mask_2.detach().cpu().numpy() > 0.5
-    mask_3 = mask_3.detach().cpu().numpy() > 0.5
+        mask_1 = mask_1.transpose(0, 1)  # [N, K]
+        mask_2 = mask_2.transpose(0, 1)  # [N, K]
+        mask_3 = mask_3.transpose(0, 1)  # [N, K]
 
-    org_iou = pred_iou.detach().cpu().numpy()  # [K, 3]
+        mask_1 = mask_1.detach().cpu().numpy() > 0.5
+        mask_2 = mask_2.detach().cpu().numpy() > 0.5
+        mask_3 = mask_3.detach().cpu().numpy() > 0.5
+
+        org_iou = pred_iou.detach().cpu().numpy()  # [K, 3]
+
+        return mask_1, mask_2, mask_3, org_iou
+
+    model_core = model.module if isinstance(model, torch.nn.DataParallel) else model
+    device = feats.device if isinstance(feats, torch.Tensor) else torch.device("cuda")
+    if not isinstance(feats, torch.Tensor):
+        feats = torch.from_numpy(feats).float().to(device)
+    points_t = torch.from_numpy(points).float().to(device)
+    prompt_t = torch.from_numpy(point_prompt).float().to(device)
+
+    global_max = None
+    for start in range(0, point_num, point_chunk):
+        end = min(start + point_chunk, point_num)
+        chunk_size = end - start
+        feats_chunk = feats[start:end]  # [C, 512]
+        points_chunk = points_t[start:end]  # [C, 3]
+        feats_rep = feats_chunk.unsqueeze(1).repeat(1, prompt_num, 1)  # [C, K, 512]
+        points_rep = points_chunk.unsqueeze(1).repeat(1, prompt_num, 1)  # [C, K, 3]
+        prompt_rep = prompt_t.unsqueeze(0).repeat(chunk_size, 1, 1)  # [C, K, 3]
+        feats_seg = torch.cat([feats_rep, points_rep, prompt_rep], dim=-1)
+        pred_mask_1 = model_core.seg_mlp_1(feats_seg).squeeze(-1)
+        pred_mask_2 = model_core.seg_mlp_2(feats_seg).squeeze(-1)
+        pred_mask_3 = model_core.seg_mlp_3(feats_seg).squeeze(-1)
+        pred_mask = torch.stack(
+            [pred_mask_1, pred_mask_2, pred_mask_3], dim=-1
+        )  # [C, K, 3]
+        feats_seg_2 = torch.cat([feats_seg, pred_mask], dim=-1)
+        feats_seg_global = model_core.seg_s2_mlp_g(feats_seg_2)  # [C, K, 512]
+        chunk_max = torch.max(feats_seg_global, dim=0).values  # [K, 512]
+        global_max = (
+            chunk_max if global_max is None else torch.maximum(global_max, chunk_max)
+        )
+
+    mask_1 = np.zeros((point_num, prompt_num), dtype=bool)
+    mask_2 = np.zeros((point_num, prompt_num), dtype=bool)
+    mask_3 = np.zeros((point_num, prompt_num), dtype=bool)
+    iou_max = None
+    for start in range(0, point_num, point_chunk):
+        end = min(start + point_chunk, point_num)
+        chunk_size = end - start
+        feats_chunk = feats[start:end]
+        points_chunk = points_t[start:end]
+        feats_rep = feats_chunk.unsqueeze(1).repeat(1, prompt_num, 1)
+        points_rep = points_chunk.unsqueeze(1).repeat(1, prompt_num, 1)
+        prompt_rep = prompt_t.unsqueeze(0).repeat(chunk_size, 1, 1)
+        feats_seg = torch.cat([feats_rep, points_rep, prompt_rep], dim=-1)
+        pred_mask_1 = model_core.seg_mlp_1(feats_seg).squeeze(-1)
+        pred_mask_2 = model_core.seg_mlp_2(feats_seg).squeeze(-1)
+        pred_mask_3 = model_core.seg_mlp_3(feats_seg).squeeze(-1)
+        pred_mask = torch.stack(
+            [pred_mask_1, pred_mask_2, pred_mask_3], dim=-1
+        )  # [C, K, 3]
+        feats_seg_2 = torch.cat([feats_seg, pred_mask], dim=-1)
+        feats_seg_global = global_max.unsqueeze(0).expand(chunk_size, -1, -1)
+        feats_seg_3 = torch.cat([feats_seg_global, feats_seg_2], dim=-1)
+        pred_mask_s2_1 = model_core.seg_s2_mlp_1(feats_seg_3).squeeze(-1)
+        pred_mask_s2_2 = model_core.seg_s2_mlp_2(feats_seg_3).squeeze(-1)
+        pred_mask_s2_3 = model_core.seg_s2_mlp_3(feats_seg_3).squeeze(-1)
+        pred_mask_s2 = torch.stack(
+            [pred_mask_s2_1, pred_mask_s2_2, pred_mask_s2_3], dim=-1
+        )
+        mask_1[start:end] = (
+            torch.sigmoid(pred_mask_s2_1) > 0.5
+        ).detach().cpu().numpy()
+        mask_2[start:end] = (
+            torch.sigmoid(pred_mask_s2_2) > 0.5
+        ).detach().cpu().numpy()
+        mask_3[start:end] = (
+            torch.sigmoid(pred_mask_s2_3) > 0.5
+        ).detach().cpu().numpy()
+
+        feats_iou = torch.cat([feats_seg_global, feats_seg, pred_mask_s2], dim=-1)
+        feats_iou = model_core.iou_mlp(feats_iou)
+        chunk_iou = torch.max(feats_iou, dim=0).values
+        iou_max = chunk_iou if iou_max is None else torch.maximum(iou_max, chunk_iou)
+
+    pred_iou = model_core.iou_mlp_out(iou_max)
+    pred_iou = torch.sigmoid(pred_iou).to(dtype=torch.float32)
+    org_iou = pred_iou.detach().cpu().numpy()
 
     return mask_1, mask_2, mask_3, org_iou
 
@@ -766,6 +846,7 @@ def mesh_sam(
     clean_mesh_flag=True,
     seed=42,
     prompt_bs=32,
+    point_chunk=10000,
 ):
     with Timer("Load mesh"):
         model, model_parallel = model
@@ -830,7 +911,7 @@ def mesh_sam(
         for i in tqdm(range(step_num), disable=not show_info):
             cur_propmt = _point_prompts[bs * i : bs * (i + 1)]
             pred_mask_1, pred_mask_2, pred_mask_3, pred_iou = get_mask(
-                model_parallel, _feats, _points, cur_propmt
+                model_parallel, _feats, _points, cur_propmt, point_chunk=point_chunk
             )
             pred_mask = np.stack(
                 [pred_mask_1, pred_mask_2, pred_mask_3], axis=-1
@@ -1239,6 +1320,7 @@ class AutoMask:
         ckpt_path,
         point_num=30000,
         prompt_num=400,
+        point_chunk=10000,
         threshold=0.95,
         post_process=True,
     ):
@@ -1246,6 +1328,7 @@ class AutoMask:
         ckpt_path: str, model path
         point_num: int, number of sampled points
         prompt_num: int, number of prompts
+        point_chunk: int, number of points per inference chunk
         threshold: float, threshold
         post_process: bool, whether to post-process
         """
@@ -1257,17 +1340,19 @@ class AutoMask:
         self.model_parallel.cuda()
         self.point_num = point_num
         self.prompt_num = prompt_num
+        self.point_chunk = point_chunk
         self.threshold = threshold
         self.post_process = post_process
 
     def predict_aabb(
-        self, mesh, point_num=None, prompt_num=None, threshold=None, post_process=None, save_path=None, save_mid_res=False, show_info=True, clean_mesh_flag=True, seed=42, is_parallel=True, prompt_bs=32
+        self, mesh, point_num=None, prompt_num=None, point_chunk=None, threshold=None, post_process=None, save_path=None, save_mid_res=False, show_info=True, clean_mesh_flag=True, seed=42, is_parallel=True, prompt_bs=32
     ):
         """
         Parameters:
             mesh: trimesh.Trimesh, input mesh
             point_num: int, number of sampled points
             prompt_num: int, number of prompts
+            point_chunk: int, number of points per inference chunk
             threshold: float, threshold
             post_process: bool, whether to post-process
         Returns:
@@ -1276,6 +1361,7 @@ class AutoMask:
         """
         point_num = point_num if point_num is not None else self.point_num
         prompt_num = prompt_num if prompt_num is not None else self.prompt_num
+        point_chunk = point_chunk if point_chunk is not None else self.point_chunk
         threshold = threshold if threshold is not None else self.threshold
         post_process = post_process if post_process is not None else self.post_process
         return mesh_sam(
@@ -1284,6 +1370,7 @@ class AutoMask:
             save_path=save_path,
             point_num=point_num,
             prompt_num=prompt_num,
+            point_chunk=point_chunk,
             threshold=threshold,
             post_process=post_process,
             show_info=show_info,
@@ -1310,6 +1397,7 @@ if __name__ == '__main__':
     argparser.add_argument('--output_path', type=str, default='results/1', help='Output path')
     argparser.add_argument('--point_num', type=int, default=30000, help='Number of sampled points')
     argparser.add_argument('--prompt_num', type=int, default=400, help='Number of prompts')
+    argparser.add_argument('--point_chunk', type=int, default=10000, help='Points per inference chunk')
     argparser.add_argument('--threshold', type=float, default=0.95, help='Threshold')
     argparser.add_argument('--post_process', type=int, default=0, help='Enable post-processing')
     argparser.add_argument('--save_mid_res', type=int, default=1, help='Save intermediate results')
@@ -1341,6 +1429,7 @@ if __name__ == '__main__':
                                                         save_path=_output_path, 
                                                         point_num=args.point_num, 
                                                         prompt_num=args.prompt_num, 
+                                                        point_chunk=args.point_chunk,
                                                         threshold=args.threshold, 
                                                         post_process=args.post_process, 
                                                         save_mid_res=args.save_mid_res, 
@@ -1355,6 +1444,7 @@ if __name__ == '__main__':
                                                     save_path=output_path, 
                                                     point_num=args.point_num, 
                                                     prompt_num=args.prompt_num, 
+                                                    point_chunk=args.point_chunk,
                                                     threshold=args.threshold, 
                                                     post_process=args.post_process, 
                                                     save_mid_res=args.save_mid_res, 

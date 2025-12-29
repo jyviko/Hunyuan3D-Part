@@ -86,5 +86,5 @@ packages = [
 
 [tool.setuptools.package-data]
 partgen = ["config/*.yaml", "config/*.json"]
-p3sam.demo = ["assets/*.glb"]
-p3sam.utils.chamfer3D = ["*.cu", "*.cpp"]
+"p3sam.demo" = ["assets/*.glb"]
+"p3sam.utils.chamfer3D" = ["*.cu", "*.cpp"]

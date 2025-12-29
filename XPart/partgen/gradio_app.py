@@ -56,6 +56,10 @@ def run_infer(
     pin_length,
     pin_clearance,
     pin_area_per_pin,
+    pin_interface_distance,
+    pin_edge_distance,
+    pin_sample_count,
+    pin_boolean_engine,
 ):
     """Run inference on a single mesh file."""
     pipeline = _PIPELINE
@@ -73,6 +77,12 @@ def run_infer(
     pin_length = float(pin_length)
     pin_clearance = float(pin_clearance)
     pin_area_per_pin = float(pin_area_per_pin)
+    pin_interface_distance = float(pin_interface_distance)
+    pin_edge_distance = float(pin_edge_distance)
+    pin_sample_count = int(pin_sample_count)
+    pin_boolean_engine = str(pin_boolean_engine).strip()
+    if pin_boolean_engine == "":
+        pin_boolean_engine = None
     print(f"Running inference on {mesh_file_name} with seed {seed}")
     # Ensure deterministic behavior per request
     try:
@@ -95,6 +105,10 @@ def run_infer(
         pin_length=pin_length,
         pin_clearance=pin_clearance,
         pin_area_per_pin=pin_area_per_pin,
+        pin_interface_distance=pin_interface_distance,
+        pin_edge_distance=pin_edge_distance,
+        pin_sample_count=pin_sample_count,
+        pin_boolean_engine=pin_boolean_engine,
         **additional_params,
     )
     obj_path = "tmp_obj.glb"
@@ -126,6 +140,10 @@ def _build_examples():
         6.0,
         0.2,
         2000.0,
+        0.5,
+        6.0,
+        20000,
+        "",
     ]
     candidates = [
         ("000.glb", 42),
@@ -174,6 +192,10 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
             gr.Number(value=6.0, label="Pin Length (mm)"),
             gr.Number(value=0.2, label="Pin Clearance (mm)"),
             gr.Number(value=2000.0, label="Pin Area per Pin (mm²)"),
+            gr.Number(value=0.5, label="Pin Interface Distance (mm)"),
+            gr.Number(value=6.0, label="Pin Edge Distance (mm)"),
+            gr.Number(value=20000, label="Pin Sample Count", precision=0),
+            gr.Textbox(value="", label="Pin Boolean Engine"),
         ],
         outputs=[
             gr.Model3D(

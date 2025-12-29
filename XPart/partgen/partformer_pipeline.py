@@ -312,7 +312,18 @@ class PartFormerPipeline(TokenAllocMixin):
         return extra_step_kwargs
 
     def predict_bbox(
-        self, mesh: trimesh.Trimesh, scale_box=1.0, drop_normal=True, seed=42
+        self,
+        mesh: trimesh.Trimesh,
+        scale_box=1.0,
+        drop_normal=True,
+        seed=42,
+        point_num=None,
+        prompt_num=None,
+        threshold=None,
+        post_process=None,
+        clean_mesh_flag=True,
+        show_info=False,
+        save_mid_res=False,
     ):
         """
         Predict the bounding box of the object surface.
@@ -324,7 +335,15 @@ class PartFormerPipeline(TokenAllocMixin):
         if self.bbox_predictor is None:
             raise ValueError("bbox_predictor is not set.")
         aabb, face_ids, mesh = self.bbox_predictor.predict_aabb(
-            mesh, post_process=True, seed=seed
+            mesh,
+            point_num=point_num,
+            prompt_num=prompt_num,
+            threshold=threshold,
+            post_process=post_process,
+            clean_mesh_flag=clean_mesh_flag,
+            show_info=show_info,
+            save_mid_res=save_mid_res,
+            seed=seed,
         )
         # aabb, face_ids, mesh = self.bbox_predictor.predict_aabb(mesh, post_process=False)
         aabb = torch.from_numpy(aabb)
@@ -398,6 +417,11 @@ class PartFormerPipeline(TokenAllocMixin):
         aabb=None,
         part_surface_inbbox=None,
         seed=42,
+        bbox_point_num=None,
+        bbox_prompt_num=None,
+        bbox_threshold=None,
+        bbox_post_process=None,
+        bbox_clean_mesh_flag=True,
     ):
         """
         Check the inputs of the pipeline.
@@ -451,7 +475,15 @@ class PartFormerPipeline(TokenAllocMixin):
             obj_surface = obj_surface.unsqueeze(0)
         # 2. load aabb
         if aabb is None:
-            aabb = self.predict_bbox(mesh, seed=seed)
+            aabb = self.predict_bbox(
+                mesh,
+                seed=seed,
+                point_num=bbox_point_num,
+                prompt_num=bbox_prompt_num,
+                threshold=bbox_threshold,
+                post_process=bbox_post_process,
+                clean_mesh_flag=bbox_clean_mesh_flag,
+            )
             print(f"Get bbox from bbox_predictor: {aabb.shape}")
         else:
             if isinstance(aabb, np.ndarray):
@@ -560,6 +592,11 @@ class PartFormerPipeline(TokenAllocMixin):
         dual_guidance: bool = True,
         generator=None,
         seed=42,
+        bbox_point_num=None,
+        bbox_prompt_num=None,
+        bbox_threshold=None,
+        bbox_post_process=None,
+        bbox_clean_mesh_flag=True,
         # marching cubes
         box_v=1.01,
         octree_resolution=512,
@@ -594,6 +631,11 @@ class PartFormerPipeline(TokenAllocMixin):
             aabb,
             part_surface_inbbox,
             seed=seed,
+            bbox_point_num=bbox_point_num,
+            bbox_prompt_num=bbox_prompt_num,
+            bbox_threshold=bbox_threshold,
+            bbox_post_process=bbox_post_process,
+            bbox_clean_mesh_flag=bbox_clean_mesh_flag,
         )
         if self.verbose:
             # return gt mesh with bbox

@@ -60,7 +60,7 @@ class P3SAM(nn.Module):
         point_prompt = point_prompt.transpose(0, 1)  # [N, K, 3]
         feats_seg = torch.cat([feats, points, point_prompt], dim=-1)  # [N, K, 512+3+3]
 
-        # 预测mask stage-1
+        # Predict mask stage-1
         pred_mask_1 = self.seg_mlp_1(feats_seg).squeeze(-1)  # [N, K]
         pred_mask_2 = self.seg_mlp_2(feats_seg).squeeze(-1)  # [N, K]
         pred_mask_3 = self.seg_mlp_3(feats_seg).squeeze(-1)  # [N, K]
@@ -69,7 +69,7 @@ class P3SAM(nn.Module):
         )  # [N, K, 3]
 
         for _ in range(iter):
-            # 预测mask stage-2
+            # Predict mask stage-2
             feats_seg_2 = torch.cat([feats_seg, pred_mask], dim=-1)  # [N, K, 512+3+3+3]
             feats_seg_global = self.seg_s2_mlp_g(feats_seg_2)  # [N, K, 512]
             feats_seg_global = torch.max(feats_seg_global, dim=0).values  # [K, 512]
@@ -191,16 +191,16 @@ def cal_single_iou(m1, m2):
 
 def iou_3d(box1, box2, signle=None):
     """
-    计算两个三维边界框的交并比 (IoU)
+    Compute IoU for two 3D bounding boxes.
 
-    参数:
-        box1 (list): 第一个边界框的坐标 [x1_min, y1_min, z1_min, x1_max, y1_max, z1_max]
-        box2 (list): 第二个边界框的坐标 [x2_min, y2_min, z2_min, x2_max, y2_max, z2_max]
+    Args:
+        box1 (list): [x1_min, y1_min, z1_min, x1_max, y1_max, z1_max]
+        box2 (list): [x2_min, y2_min, z2_min, x2_max, y2_max, z2_max]
 
-    返回:
-        float: 交并比 (IoU) 值
+    Returns:
+        float: IoU value.
     """
-    # 计算交集的坐标
+    # Compute intersection coordinates
     intersection_xmin = max(box1[0], box2[0])
     intersection_ymin = max(box1[1], box2[1])
     intersection_zmin = max(box1[2], box2[2])
@@ -208,27 +208,27 @@ def iou_3d(box1, box2, signle=None):
     intersection_ymax = min(box1[4], box2[4])
     intersection_zmax = min(box1[5], box2[5])
 
-    # 判断是否有交集
+    # Check whether there is an intersection
     if (
         intersection_xmin >= intersection_xmax
         or intersection_ymin >= intersection_ymax
         or intersection_zmin >= intersection_zmax
     ):
-        return 0.0  # 无交集
+        return 0.0  # No intersection
 
-    # 计算交集的体积
+    # Compute intersection volume
     intersection_volume = (
         (intersection_xmax - intersection_xmin)
         * (intersection_ymax - intersection_ymin)
         * (intersection_zmax - intersection_zmin)
     )
 
-    # 计算两个盒子的体积
+    # Compute volumes of both boxes
     box1_volume = (box1[3] - box1[0]) * (box1[4] - box1[1]) * (box1[5] - box1[2])
     box2_volume = (box2[3] - box2[0]) * (box2[4] - box2[1]) * (box2[5] - box2[2])
 
     if signle is None:
-        # 计算并集的体积
+        # Compute union volume
         union_volume = box1_volume + box2_volume - intersection_volume
     elif signle == "1":
         union_volume = box1_volume
@@ -237,7 +237,7 @@ def iou_3d(box1, box2, signle=None):
     else:
         raise ValueError("signle must be None or 1 or 2")
 
-    # 计算 IoU
+    # Compute IoU
     iou = intersection_volume / union_volume if union_volume > 0 else 0.0
     return iou
 
@@ -262,26 +262,26 @@ def clean_mesh(mesh):
     """
     mesh: trimesh.Trimesh
     """
-    # 1. 合并接近的顶点
+    # 1. Merge nearby vertices
     mesh.merge_vertices()
 
-    # 2. 删除重复的顶点
-    # 3. 删除重复的面片
+    # 2. Remove duplicate vertices
+    # 3. Remove duplicate faces
     mesh.process(True)
     return mesh
 
 
 def remove_outliers_iqr(data, factor=1.5):
     """
-    基于 IQR 去除离群值
-    :param data: 输入的列表或 NumPy 数组
-    :param factor: IQR 的倍数（默认 1.5）
-    :return: 去除离群值后的列表
+    Remove outliers using IQR.
+    :param data: input list or NumPy array
+    :param factor: IQR multiplier (default 1.5)
+    :return: list with outliers removed
     """
     data = np.array(data, dtype=np.float32)
-    q1 = np.percentile(data, 25)  # 第一四分位数
-    q3 = np.percentile(data, 75)  # 第三四分位数
-    iqr = q3 - q1  # 四分位距
+    q1 = np.percentile(data, 25)  # First quartile
+    q3 = np.percentile(data, 75)  # Third quartile
+    iqr = q3 - q1  # Interquartile range
     lower_bound = q1 - factor * iqr
     upper_bound = q3 + factor * iqr
     return data[(data >= lower_bound) & (data <= upper_bound)].tolist()
@@ -316,7 +316,7 @@ def fix_label(face_ids, adjacent_faces, use_aabb=False, mesh=None, show_info=Fal
             _part_mask = np.reshape(_part_mask, (-1, 3))
             _part_mask = np.all(_part_mask, axis=1)
             return i, [min_xyz, max_xyz], _part_mask
-        with Timer("计算aabb"):
+        with Timer("Compute AABB"):
             aabb = {}
             unique_ids = np.unique(face_ids)
             # print(max(unique_ids))
@@ -342,7 +342,7 @@ def fix_label(face_ids, adjacent_faces, use_aabb=False, mesh=None, show_info=Fal
             # _points = _vertices[_faces]
             # aabb_face_mask = cal_aabb_mask(_points, face_ids)
 
-    with Timer("合并mesh"):
+    with Timer("Merge mesh"):
         loop_cnt = 1
         changed = True
         progress = tqdm(disable=not show_info)
@@ -350,11 +350,11 @@ def fix_label(face_ids, adjacent_faces, use_aabb=False, mesh=None, show_info=Fal
         faces_max = adjacent_faces.shape[0]
         while changed and loop_cnt <= 50:
             changed = False
-            # 获取无色面片
+            # Collect uncolored faces
             new_no_mask_ids = []
             for i in no_mask_ids:
                 # if face_ids[i] < 0:
-                # 找邻居
+                # Find neighbors
                 if not (0 <= i < faces_max):
                     continue
                 _adj_faces = adjacent_faces[i]
@@ -379,7 +379,7 @@ def fix_label(face_ids, adjacent_faces, use_aabb=False, mesh=None, show_info=Fal
             no_mask_ids = new_no_mask_ids
             # print(loop_cnt)
             progress.update(1)
-            # progress.set_description(f"合并mesh循环：{loop_cnt} {np.sum(face_ids < 0)}")
+            # progress.set_description(f"Merge mesh loop: {loop_cnt} {np.sum(face_ids < 0)}")
             loop_cnt += 1
     return face_ids
 
@@ -396,7 +396,7 @@ def save_mesh(save_path, mesh, face_ids, color_map):
     mesh_save.visual.face_colors = face_colors
     mesh_save.export(save_path)
     mesh_save.export(save_path.replace(".glb", ".ply"))
-    # print('保存mesh完成')
+    # print("Finished saving mesh")
 
     scene_mesh = trimesh.Scene()
     scene_mesh.add_geometry(mesh_save)
@@ -446,25 +446,25 @@ def get_aabb_from_face_ids(mesh, face_ids):
 
 def calculate_face_areas(mesh):
     """
-    计算每个三角形面片的面积
-    :param mesh: trimesh.Trimesh 对象
-    :return: 面片面积数组 (n_faces,)
+    Compute the area of each triangle face.
+    :param mesh: trimesh.Trimesh object
+    :return: face area array (n_faces,)
     """
     return mesh.area_faces
-    # # 提取顶点和面片索引
+    # # Extract vertices and face indices
     # vertices = mesh.vertices
     # faces = mesh.faces
 
-    # # 获取所有三个顶点的坐标
+    # # Get coordinates of all three vertices
     # v0 = vertices[faces[:, 0]]
     # v1 = vertices[faces[:, 1]]
     # v2 = vertices[faces[:, 2]]
 
-    # # 计算两个边向量
+    # # Compute two edge vectors
     # edge1 = v1 - v0
     # edge2 = v2 - v0
 
-    # # 计算叉积的模长（向量面积的两倍）
+    # # Compute cross product magnitude (twice the triangle area)
     # cross_product = np.cross(edge1, edge2)
     # areas = 0.5 * np.linalg.norm(cross_product, axis=1)
 
@@ -504,37 +504,37 @@ def get_connected_region(face_ids, adjacent_faces, return_face_part_ids=False):
 
 def aabb_distance(box1, box2):
     """
-    计算两个轴对齐包围盒（AABB）之间的最近距离。
-    :param box1: 元组 (min_x, min_y, min_z, max_x, max_y, max_z)
-    :param box2: 元组 (min_x, min_y, min_z, max_x, max_y, max_z)
-    :return: 最近距离（浮点数）
+    Compute the minimum distance between two AABBs.
+    :param box1: tuple (min_x, min_y, min_z, max_x, max_y, max_z)
+    :param box2: tuple (min_x, min_y, min_z, max_x, max_y, max_z)
+    :return: minimum distance (float)
     """
-    # 解包坐标
+    # Unpack coordinates
     min1, max1 = box1
     min2, max2 = box2
 
-    # 计算各轴上的分离距离
-    dx = max(0, max2[0] - min1[0], max1[0] - min2[0])  # x轴分离距离
-    dy = max(0, max2[1] - min1[1], max1[1] - min2[1])  # y轴分离距离
-    dz = max(0, max2[2] - min1[2], max1[2] - min2[2])  # z轴分离距离
+    # Compute separation distance along each axis
+    dx = max(0, max2[0] - min1[0], max1[0] - min2[0])  # x-axis separation
+    dy = max(0, max2[1] - min1[1], max1[1] - min2[1])  # y-axis separation
+    dz = max(0, max2[2] - min1[2], max1[2] - min2[2])  # z-axis separation
 
-    # 如果所有轴都重叠，则距离为0
+    # If all axes overlap, distance is 0
     if dx == 0 and dy == 0 and dz == 0:
         return 0.0
 
-    # 计算欧几里得距离
+    # Compute Euclidean distance
     return np.sqrt(dx**2 + dy**2 + dz**2)
 
 def aabb_volume(aabb):
     """
-    计算轴对齐包围盒（AABB）的体积。
-    :param aabb: 元组 (min_x, min_y, min_z, max_x, max_y, max_z)
-    :return: 体积（浮点数）
+    Compute the volume of an AABB.
+    :param aabb: tuple (min_x, min_y, min_z, max_x, max_y, max_z)
+    :return: volume (float)
     """
-    # 解包坐标
+    # Unpack coordinates
     min_xyz, max_xyz = aabb
 
-    # 计算体积
+    # Compute volume
     dx = max_xyz[0] - min_xyz[0]
     dy = max_xyz[1] - min_xyz[1]
     dz = max_xyz[2] - min_xyz[2]
@@ -585,7 +585,7 @@ def find_neighbor_part(parts, adjacent_faces, parts_aabb=None, parts_ids=None):
 
 
 def do_post_process(face_areas, parts, adjacent_faces, face_ids, threshold=0.95, show_info=False):
-    # # 获取邻接面片
+    # # Get adjacent faces
     # mesh_save = mesh.copy()
     # face_adjacency = mesh.face_adjacency
     # adjacent_faces = {}
@@ -602,13 +602,13 @@ def do_post_process(face_areas, parts, adjacent_faces, face_ids, threshold=0.95,
 
     unique_ids = np.unique(face_ids)
     if show_info:
-        print(f"连通区域数量：{len(parts)}")
-        print(f"ID数量：{len(unique_ids)}")
+        print(f"Connected component count: {len(parts)}")
+        print(f"ID count: {len(unique_ids)}")
 
     # face_areas = calculate_face_areas(mesh)
     total_area = np.sum(face_areas)
     if show_info:
-        print(f"总面积：{total_area}")
+        print(f"Total area: {total_area}")
     part_areas = []
     for i, part in enumerate(parts):
         part_area = np.sum(face_areas[part])
@@ -636,7 +636,7 @@ def do_post_process(face_areas, parts, adjacent_faces, face_ids, threshold=0.95,
                         max_part = j
                 if max_part != -1:
                     if show_info:
-                        print(f"合并mesh：{i} {max_part}")
+                        print(f"Merge mesh: {i} {max_part}")
                     parts[max_part].extend(part)
                     parts[i] = []
                     target_face_id = face_ids[parts[max_part][0]]
@@ -647,7 +647,7 @@ def do_post_process(face_areas, parts, adjacent_faces, face_ids, threshold=0.95,
 
 
 def do_no_mask_process(parts, face_ids):
-    # # 获取邻接面片
+    # # Get adjacent faces
     # mesh_save = mesh.copy()
     # face_adjacency = mesh.face_adjacency
     # adjacent_faces = {}
@@ -695,10 +695,10 @@ def aabb_increase(aabb1, aabb2):
 def sort_multi_list(multi_list, key=lambda x: x[0], reverse=False):
     '''
     multi_list: [list1, list2, list3, list4, ...], len(list1)=N, len(list2)=N, len(list3)=N, ...
-    key: 排序函数，默认按第一个元素排序
-    reverse: 排序顺序，默认降序
+    key: sort key function, defaults to the first element
+    reverse: sort order, descending by default
     return:
-        [list1, list2, list3, list4, ...]: 按同一个顺序排序后的多个list
+        [list1, list2, list3, list4, ...]: multiple lists sorted in the same order
     '''
     sorted_list = sorted(zip(*multi_list), key=key, reverse=reverse)
     return zip(*sorted_list)
@@ -713,38 +713,38 @@ class Timer:
         if not Timer.STATE:
             return
         self.start_time = time.time()
-        return self  # 可以返回 self 以便在 with 块内访问
+        return self  # Return self for access inside the with block
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if not Timer.STATE:
             return
         self.end_time = time.time()
         self.elapsed_time = self.end_time - self.start_time
-        print(f">>>>>>代码{self.name} 运行时间: {self.elapsed_time:.4f} 秒")
+        print(f">>>>>>Code {self.name} runtime: {self.elapsed_time:.4f} seconds")
 
-###################### NUMBA 加速 ######################
+###################### NUMBA Acceleration ######################
 @njit
 def build_adjacent_faces_numba(face_adjacency):
     """
-    使用 Numba 加速构建邻接面片数组。
-    :param face_adjacency: (N, 2) numpy 数组，包含邻接面片对。
+    Use Numba to build the adjacent face array.
+    :param face_adjacency: (N, 2) numpy array containing adjacent face pairs.
     :return: 
-        - adj_list: 一维数组，存储所有邻接面片。
-        - offsets: 一维数组，记录每个面片的邻接起始位置。
+        - adj_list: 1D array storing all adjacent faces.
+        - offsets: 1D array storing adjacency offsets per face.
     """
-    n_faces = np.max(face_adjacency) + 1  # 总面片数
-    n_edges = face_adjacency.shape[0]     # 总邻接边数
+    n_faces = np.max(face_adjacency) + 1  # Total face count
+    n_edges = face_adjacency.shape[0]     # Total adjacent edge count
 
-    # 第一步：统计每个面片的邻接数量（度数）
+    # Step 1: count adjacency degree per face
     degrees = np.zeros(n_faces, dtype=np.int32)
     for i in range(n_edges):
         f1, f2 = face_adjacency[i]
         degrees[f1] += 1
         degrees[f2] += 1
-    max_degree = np.max(degrees)  # 最大度数
+    max_degree = np.max(degrees)  # Max degree
 
-    adjacent_faces = np.ones((n_faces, max_degree), dtype=np.int32) * -1  # 邻接面片数组
-    adjacent_faces_count = np.zeros(n_faces, dtype=np.int32)  # 邻接面片计数器
+    adjacent_faces = np.ones((n_faces, max_degree), dtype=np.int32) * -1  # Adjacent face array
+    adjacent_faces_count = np.zeros(n_faces, dtype=np.int32)  # Adjacent face counter
     for i in range(n_edges):
         f1, f2 = face_adjacency[i]
         adjacent_faces[f1, adjacent_faces_count[f1]] = f2
@@ -752,7 +752,7 @@ def build_adjacent_faces_numba(face_adjacency):
         adjacent_faces[f2, adjacent_faces_count[f2]] = f1
         adjacent_faces_count[f2] += 1
     return adjacent_faces
-###################### NUMBA 加速 ######################
+###################### NUMBA Acceleration ######################
 
 def mesh_sam(
     model,
@@ -768,34 +768,32 @@ def mesh_sam(
     seed=42,
     prompt_bs=32,
 ):
-    with Timer("加载mesh"):
+    with Timer("Load mesh"):
         model, model_parallel = model
         if clean_mesh_flag:
             mesh = clean_mesh(mesh)
             mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces)
     if show_info:
-        print(f"点数：{mesh.vertices.shape[0]} 面片数：{mesh.faces.shape[0]}")
+        print(f"Points: {mesh.vertices.shape[0]} Faces: {mesh.faces.shape[0]}")
 
-    point_num = 100000
-    prompt_num = 400
-    with Timer("获取邻接面片"):
+    with Timer("Get adjacent faces"):
         face_adjacency = mesh.face_adjacency
-    with Timer("处理邻接面片"):
+    with Timer("Process adjacent faces"):
         adjacent_faces = build_adjacent_faces_numba(face_adjacency)
 
     
-    with Timer("采样点云"):
+    with Timer("Sample point cloud"):
         _points, face_idx = trimesh.sample.sample_surface(mesh, point_num, seed=seed)
         _points_org = _points.copy()
         _points = normalize_pc(_points)
         normals = mesh.face_normals[face_idx]
     if show_info:
-        print(f"点数：{point_num} 面片数：{mesh.faces.shape[0]}")
+        print(f"Points: {point_num} Faces: {mesh.faces.shape[0]}")
 
-    with Timer("获取特征"):
+    with Timer("Extract features"):
         _feats = get_feat(model, _points, normals)
     if show_info:
-        print("预处理特征")
+        print("Preprocess features")
 
     if save_mid_res:
         feat_save = _feats.float().detach().cpu().numpy()
@@ -810,9 +808,9 @@ def mesh_sam(
         pc_save.export(os.path.join(save_path, "point_pca.glb"))
         pc_save.export(os.path.join(save_path, "point_pca.ply"))
         if show_info:
-            print("PCA获取特征颜色")
+            print("PCA feature colors")
 
-    with Timer("FPS采样提示点"):
+    with Timer("FPS sample prompt points"):
         fps_idx = fpsample.fps_sampling(_points, prompt_num)
         _point_prompts = _points[fps_idx]
     if save_mid_res:
@@ -823,9 +821,9 @@ def mesh_sam(
             os.path.join(save_path, "point_prompts_pca.ply")
         )
     if show_info:
-        print("采样完成")
+        print("Sampling complete")
 
-    with Timer("推理"):
+    with Timer("Inference"):
         bs = prompt_bs
         step_num = prompt_num // bs + 1
         mask_res = []
@@ -844,9 +842,9 @@ def mesh_sam(
                 iou_res.append(pred_iou[j, max_idx[j]])
     mask_res = np.stack(mask_res, axis=-1)  # [N, K]
     if show_info:
-        print("prmopt 推理完成")
+        print("Prompt inference complete")
 
-    with Timer("根据IOU排序"):
+    with Timer("Sort by IOU"):
         iou_res = np.array(iou_res).tolist()
         mask_iou = [[mask_res[:, i], iou_res[i]] for i in range(prompt_num)]
         mask_iou_sorted = sorted(mask_iou, key=lambda x: x[1], reverse=True)
@@ -870,14 +868,14 @@ def mesh_sam(
                     clusters[i].append(i)
 
     if show_info:
-        print(f"NMS完成，mask数量：{len(clusters)}")
+        print(f"NMS complete, mask count: {len(clusters)}")
 
     if save_mid_res:
         part_mask_save_path = os.path.join(save_path, "part_mask")
         if os.path.exists(part_mask_save_path):
             shutil.rmtree(part_mask_save_path)
         os.makedirs(part_mask_save_path, exist_ok=True)
-        for i in tqdm(clusters.keys(), desc="保存mask", disable=not show_info):
+        for i in tqdm(clusters.keys(), desc="Save masks", disable=not show_info):
             cluster_num = len(clusters[i])
             cluster_iou = iou_sorted[i]
             cluster_area = np.sum(mask_sorted[i])
@@ -895,8 +893,8 @@ def mesh_sam(
                 )
             )
 
-    # 过滤只有一个mask的cluster
-    with Timer("过滤只有一个mask的cluster"):
+    # Filter clusters with only one mask
+    with Timer("Filter clusters with only one mask"):
         filtered_clusters = []
         other_clusters = []
         for i in clusters.keys():
@@ -906,12 +904,12 @@ def mesh_sam(
                 other_clusters.append(i)
     if show_info:
         print(
-            f"过滤前：{len(clusters)} 个cluster，"
-            f"过滤后：{len(filtered_clusters)} 个cluster"
+            f"Before filter: {len(clusters)} clusters, "
+            f"after filter: {len(filtered_clusters)} clusters"
         )
 
-    # 再次合并
-    with Timer("再次合并"):
+    # Merge again
+    with Timer("Merge again"):
         filtered_clusters_num = len(filtered_clusters)
         cluster2 = {}
         is_union = [False] * filtered_clusters_num
@@ -933,22 +931,22 @@ def mesh_sam(
                     cluster2[cur_cluster].append(tar_cluster)
                     is_union[j] = True
     if show_info:
-        print(f"再次合并，合并数量：{len(cluster2.keys())}")
+        print(f"Merge again, merged count: {len(cluster2.keys())}")
 
-    with Timer("计算没有mask的点"):
+    with Timer("Compute points without mask"):
         no_mask = np.ones(point_num)
         for i in cluster2:
             part_mask = mask_sorted[i]
             no_mask[part_mask] = 0
     if show_info:
         print(
-            f"{np.sum(no_mask == 1)} 个点没有mask,"
-            f" 占比：{np.sum(no_mask == 1) / point_num:.4f}"
+            f"{np.sum(no_mask == 1)} points without mask, "
+            f"ratio: {np.sum(no_mask == 1) / point_num:.4f}"
         )
     
-    with Timer("修补遗漏mask"):
-        # 查询漏掉的mask
-        for i in tqdm(range(len(mask_sorted)), desc="漏掉mask", disable=not show_info):
+    with Timer("Repair missing masks"):
+        # Check missing masks
+        for i in tqdm(range(len(mask_sorted)), desc="Missing masks", disable=not show_info):
             if i in cluster2:
                 continue
             part_mask = mask_sorted[i]
@@ -972,9 +970,9 @@ def mesh_sam(
                         )
                     )
     if show_info:
-        print(f"修补遗漏mask：{len(cluster2.keys())}")
+        print(f"Repaired missing masks: {len(cluster2.keys())}")
 
-    with Timer("计算点云最终mask"):
+    with Timer("Compute final point cloud masks"):
         final_mask = list(cluster2.keys())
         final_mask_area = [int(np.sum(mask_sorted[i])) for i in final_mask]
         final_mask_area = [
@@ -988,10 +986,10 @@ def mesh_sam(
             final_mask_area_sorted[i][1] for i in range(len(final_mask_area))
         ]
     if show_info:
-        print(f"最终mask数量：{len(final_mask_sorted)}")
+        print(f"Final mask count: {len(final_mask_sorted)}")
 
-    with Timer("点云上色"):
-        # 生成color map
+    with Timer("Color point cloud"):
+        # Generate color map
         color_map = {}
         for i in final_mask_sorted:
             part_color = np.random.rand(3) * 255
@@ -1003,7 +1001,7 @@ def mesh_sam(
             part_mask = mask_sorted[i]
             result_mask[part_mask] = i
     if save_mid_res:
-        # 保存点云结果
+        # Save point cloud result
         result_colors = np.zeros_like(_colors_pca)
         for i in final_mask_sorted:
             part_color = color_map[i]
@@ -1016,11 +1014,11 @@ def mesh_sam(
             os.path.join(save_path, "auto_mask_cluster.ply")
         )
         if show_info:
-            print("保存点云完成")
+            print("Point cloud saved")
 
 
-    with Timer("投影Mesh并统计label"):
-        # 保存mesh结果
+    with Timer("Project mesh and count labels"):
+        # Save mesh result
         face_seg_res = {}
         for i in final_mask_sorted:
             _part_mask = result_mask == i
@@ -1039,20 +1037,20 @@ def mesh_sam(
         face_ids = -np.ones(len(mesh.faces), dtype=np.int64) * 2
         for i in tqdm(face_seg_res, leave=False, disable=True):
             _seg_ids = np.array(face_seg_res[i])
-            # 获取最多的seg_id
+            # Get most frequent seg_id
             _max_id = np.argmax(np.bincount(_seg_ids + 2)) - 2
             face_ids[i] = _max_id
         face_ids_org = face_ids.copy()
     if show_info:
-        print("生成face_ids完成")
+        print("face_ids generated")
 
 
-    with Timer("第一次修复face_ids"):
+    with Timer("First face_ids repair"):
         face_ids += 1
         face_ids = fix_label(face_ids, adjacent_faces, mesh=mesh, show_info=show_info)
         face_ids -= 1
     if show_info:
-        print("修复face_ids完成")
+        print("face_ids repair complete")
 
     color_map[-1] = np.array([255, 0, 0], dtype=np.uint8)
 
@@ -1067,16 +1065,16 @@ def mesh_sam(
             color_map,
         )
         if show_info:
-            print("保存mesh结果完成")
+            print("Mesh result saved")
 
-    with Timer("计算连通区域"):
+    with Timer("Compute connected components"):
         face_areas = calculate_face_areas(mesh)
         mesh_total_area = np.sum(face_areas)
         parts = get_connected_region(face_ids, adjacent_faces)
         connected_parts, _face_connected_parts_ids = get_connected_region(np.ones_like(face_ids), adjacent_faces, return_face_part_ids=True)
     if show_info:
-        print(f"共{len(parts)}个mesh")
-    with Timer("排序连通区域"):
+        print(f"Total {len(parts)} meshes")
+    with Timer("Sort connected components"):
         parts_cp_idx = []
         for x in parts:
             _face_idx = x[0]
@@ -1087,7 +1085,7 @@ def mesh_sam(
         parts_cp_areas = [connected_parts_areas[x] for x in parts_cp_idx]
         parts_sorted, parts_areas_sorted, parts_cp_areas_sorted = sort_multi_list([parts, parts_areas, parts_cp_areas], key=lambda x: x[1], reverse=True)
 
-    with Timer("去除面积过小的区域"):
+    with Timer("Remove small-area regions"):
         filtered_parts = []
         other_parts = []
         for i in range(len(parts_sorted)):
@@ -1099,9 +1097,11 @@ def mesh_sam(
             else:
                 other_parts.append(i)
     if show_info:
-        print(f"保留{len(filtered_parts)}个mesh, 其他{len(other_parts)}个mesh")
+        print(
+            f"Keep {len(filtered_parts)} meshes, other {len(other_parts)} meshes"
+        )
 
-    with Timer("去除面积过小区域的label"):
+    with Timer("Remove labels for small-area regions"):
         face_ids_2 = face_ids.copy()
         part_num = len(cluster2.keys())
         for j in other_parts:
@@ -1109,7 +1109,7 @@ def mesh_sam(
             for i in parts:
                 face_ids_2[i] = -1
 
-    with Timer("第二次修复face_ids"):
+    with Timer("Second face_ids repair"):
         face_ids_3 = face_ids_2.copy()
         face_ids_3 = fix_label(face_ids_3, adjacent_faces, mesh=mesh, show_info=show_info)
 
@@ -1121,14 +1121,14 @@ def mesh_sam(
             color_map,
         )
         if show_info:
-            print("保存mesh结果完成")
+            print("Mesh result saved")
 
-    with Timer("第二次计算连通区域"):
+    with Timer("Second connected component computation"):
         parts_2 = get_connected_region(face_ids_3, adjacent_faces)
         parts_areas_2 = [float(np.sum(face_areas[x])) for x in parts_2]
         parts_ids_2 = [face_ids_3[x[0]] for x in parts_2]
 
-    with Timer("添加过大的缺失part"):
+    with Timer("Add oversized missing parts"):
         color_map_2 = copy.deepcopy(color_map)
         max_id = np.max(parts_ids_2)
         for i in range(len(parts_2)):
@@ -1141,18 +1141,18 @@ def mesh_sam(
                     max_id += 1
                     color_map_2[max_id] = np.random.rand(3) * 255
                     if show_info:
-                        print(f"新增part {max_id}")
+                        print(f"Add part {max_id}")
             # else:
             #     parts_ids_2[i] = -1
 
-    with Timer("赋值新的face_ids"):
+    with Timer("Assign new face_ids"):
         face_ids_4 = face_ids_3.copy()
         for i in range(len(parts_2)):
             _parts = parts_2[i]
             _parts_id = parts_ids_2[i]
             for j in _parts:
                 face_ids_4[j] = _parts_id
-    with Timer("计算part和label的aabb"):
+    with Timer("Compute AABB for parts and labels"):
         ids_aabb = {}
         unique_ids = np.unique(face_ids_4)
         for i in unique_ids:
@@ -1176,9 +1176,9 @@ def mesh_sam(
             max_xyz = np.max(_points, axis=0)
             parts_2_aabb.append([min_xyz, max_xyz])
 
-    with Timer("计算part的邻居"):
+    with Timer("Compute part neighbors"):
         parts_2_neighbor = find_neighbor_part(parts_2, adjacent_faces, parts_2_aabb, parts_ids_2)
-    with Timer("合并无mask区域"):
+    with Timer("Merge no-mask regions"):
         for i in range(len(parts_2)):
             _parts = parts_2[i]
             _ids = parts_ids_2[i]
@@ -1200,7 +1200,7 @@ def mesh_sam(
                     parts_ids_2[i] = _min_id
     
 
-    with Timer("再次赋值新的face_ids"):
+    with Timer("Reassign face_ids"):
         face_ids_4 = face_ids_3.copy()
         for i in range(len(parts_2)):
             _parts = parts_2[i]
@@ -1229,7 +1229,7 @@ def mesh_sam(
                 color_map_2,
             )
         final_face_ids = face_ids_5
-    with Timer("计算最后的aabb"):
+    with Timer("Compute final AABB"):
         aabb = get_aabb_from_face_ids(mesh, final_face_ids)
     return aabb, final_face_ids, mesh
 
@@ -1244,11 +1244,11 @@ class AutoMask:
         post_process=True,
     ):
         """
-        ckpt_path: str, 模型路径
-        point_num: int, 采样点数量
-        prompt_num: int, 提示数量
-        threshold: float, 阈值
-        post_process: bool, 是否后处理
+        ckpt_path: str, model path
+        point_num: int, number of sampled points
+        prompt_num: int, number of prompts
+        threshold: float, threshold
+        post_process: bool, whether to post-process
         """
         self.model = P3SAM()
         self.model.load_state_dict(ckpt_path)
@@ -1266,14 +1266,14 @@ class AutoMask:
     ):
         """
         Parameters:
-            mesh: trimesh.Trimesh, 输入网格
-            point_num: int, 采样点数量
-            prompt_num: int, 提示数量
-            threshold: float, 阈值
-            post_process: bool, 是否后处理
+            mesh: trimesh.Trimesh, input mesh
+            point_num: int, number of sampled points
+            prompt_num: int, number of prompts
+            threshold: float, threshold
+            post_process: bool, whether to post-process
         Returns:
-            aabb: np.ndarray, 包围盒
-            face_ids: np.ndarray, 面id
+            aabb: np.ndarray, bounding boxes
+            face_ids: np.ndarray, face ids
         """
         point_num = point_num if point_num is not None else self.point_num
         prompt_num = prompt_num if prompt_num is not None else self.prompt_num
@@ -1306,20 +1306,20 @@ def set_seed(seed):
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
-    argparser.add_argument('--ckpt_path', type=str, default=None, help='模型路径')
-    argparser.add_argument('--mesh_path', type=str, default='assets/1.glb', help='输入网格路径')
-    argparser.add_argument('--output_path', type=str, default='results/1', help='保存路径')
-    argparser.add_argument('--point_num', type=int, default=100000, help='采样点数量')
-    argparser.add_argument('--prompt_num', type=int, default=400, help='提示数量')
-    argparser.add_argument('--threshold', type=float, default=0.95, help='阈值')
-    argparser.add_argument('--post_process', type=int, default=0, help='是否后处理')
-    argparser.add_argument('--save_mid_res', type=int, default=1, help='是否保存中间结果')
-    argparser.add_argument('--show_info', type=int, default=1, help='是否显示信息')
-    argparser.add_argument('--show_time_info', type=int, default=1, help='是否显示时间信息')
-    argparser.add_argument('--seed', type=int, default=42, help='随机种子')
-    argparser.add_argument('--parallel', type=int, default=1, help='是否使用多卡')
-    argparser.add_argument('--prompt_bs', type=int, default=32, help='提示点推理时的batch size大小')
-    argparser.add_argument('--clean_mesh', type=int, default=1, help='是否清洗网格')
+    argparser.add_argument('--ckpt_path', type=str, default=None, help='Model path')
+    argparser.add_argument('--mesh_path', type=str, default='assets/1.glb', help='Input mesh path')
+    argparser.add_argument('--output_path', type=str, default='results/1', help='Output path')
+    argparser.add_argument('--point_num', type=int, default=100000, help='Number of sampled points')
+    argparser.add_argument('--prompt_num', type=int, default=400, help='Number of prompts')
+    argparser.add_argument('--threshold', type=float, default=0.95, help='Threshold')
+    argparser.add_argument('--post_process', type=int, default=0, help='Enable post-processing')
+    argparser.add_argument('--save_mid_res', type=int, default=1, help='Save intermediate results')
+    argparser.add_argument('--show_info', type=int, default=1, help='Show info')
+    argparser.add_argument('--show_time_info', type=int, default=1, help='Show timing info')
+    argparser.add_argument('--seed', type=int, default=42, help='Random seed')
+    argparser.add_argument('--parallel', type=int, default=1, help='Use multi-GPU')
+    argparser.add_argument('--prompt_bs', type=int, default=32, help='Prompt inference batch size')
+    argparser.add_argument('--clean_mesh', type=int, default=1, help='Clean mesh')
     args = argparser.parse_args()
     Timer.STATE = args.show_time_info
 
@@ -1365,7 +1365,7 @@ if __name__ == '__main__':
                                                     clean_mesh_flag=args.clean_mesh,)
 
     ###############################################
-    ## 可以通过以下代码保存返回的结果
+    ## You can use the following code to save the returned results
     ## You can save the returned result by the following code
     ################# save result #################
     # color_map = {}

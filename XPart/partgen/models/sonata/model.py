@@ -855,7 +855,7 @@ def load(
     if ckpt_only:
         return ckpt
 
-    # 关闭flash attention
+    # Disable flash attention
     # ckpt["config"]['enable_flash'] = False
 
     model = PointTransformerV3(**ckpt["config"])

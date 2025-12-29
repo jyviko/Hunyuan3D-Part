@@ -44,14 +44,40 @@ def _load_pipeline():
 _PIPELINE = _load_pipeline()
 
 
-def run_infer(mesh_file_name, seed):
+def run_infer(
+    mesh_file_name,
+    seed,
+    bbox_point_num,
+    bbox_prompt_num,
+    bbox_threshold,
+    bbox_post_process,
+    bbox_clean_mesh_flag,
+    num_inference_steps,
+    guidance_scale,
+    octree_resolution,
+):
     """Run inference on a single mesh file.
     Args:
         mesh_file_name (str): Path to the input mesh file.
         seed (int): Random seed for deterministic behavior.
+        bbox_point_num (int): Point count for bbox prediction.
+        bbox_prompt_num (int): Prompt count for bbox prediction.
+        bbox_threshold (float): Post-process threshold for bbox prediction.
+        bbox_post_process (bool): Whether to run bbox post-processing.
+        bbox_clean_mesh_flag (bool): Whether to clean the mesh for bbox prediction.
+        num_inference_steps (int): Diffusion sampling steps.
+        guidance_scale (float): Guidance scale for classifier-free guidance.
+        octree_resolution (int): Octree resolution for mesh extraction.
     Returns:
         Tuple[str, str, str, str]: Paths to the output meshes (obj_mesh, out_bbox, mesh_gt_bbox, explode_object).
     """
+    seed = int(seed)
+    bbox_point_num = int(bbox_point_num)
+    bbox_prompt_num = int(bbox_prompt_num)
+    bbox_threshold = float(bbox_threshold)
+    num_inference_steps = int(num_inference_steps)
+    guidance_scale = float(guidance_scale)
+    octree_resolution = int(octree_resolution)
     print(f"Running inference on {mesh_file_name} with seed {seed}")
     # Ensure deterministic behavior per request
     try:
@@ -62,7 +88,14 @@ def run_infer(mesh_file_name, seed):
     additional_params = {"output_type": "trimesh"}
     obj_mesh, (out_bbox, mesh_gt_bbox, explode_object) = _PIPELINE(
         mesh_path=mesh_file_name,
-        octree_resolution=512,
+        octree_resolution=octree_resolution,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=guidance_scale,
+        bbox_point_num=bbox_point_num,
+        bbox_prompt_num=bbox_prompt_num,
+        bbox_threshold=bbox_threshold,
+        bbox_post_process=bbox_post_process,
+        bbox_clean_mesh_flag=bbox_clean_mesh_flag,
         **additional_params,
     )
     # Export all results to temporary files for Gradio Model3D
@@ -95,6 +128,14 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
     inputs=[
         gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="Input Mesh"),
         gr.Number(value=42, label="Random Seed"),
+        gr.Number(value=100000, label="BBox Point Count", precision=0),
+        gr.Number(value=400, label="BBox Prompt Count", precision=0),
+        gr.Number(value=0.95, label="BBox Threshold"),
+        gr.Checkbox(value=True, label="BBox Post-process"),
+        gr.Checkbox(value=True, label="BBox Clean Mesh"),
+        gr.Number(value=50, label="Inference Steps", precision=0),
+        gr.Number(value=-1.0, label="Guidance Scale"),
+        gr.Number(value=512, label="Octree Resolution", precision=0),
     ],
     outputs=[
         gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="Predicted Object Mesh"),
@@ -103,11 +144,66 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
         gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="Exploded Object"),
     ],
     examples=[
-        [os.path.join(os.path.dirname(__file__), "data/000.glb"), 42],
-        [os.path.join(os.path.dirname(__file__), "data/001.glb"), 42],  # 42
-        [os.path.join(os.path.dirname(__file__), "data/002.glb"), 42],  # 42
-        [os.path.join(os.path.dirname(__file__), "data/003.glb"), 42],
-        [os.path.join(os.path.dirname(__file__), "data/004.glb"), 2025],
+        [
+            os.path.join(os.path.dirname(__file__), "data/000.glb"),
+            42,
+            100000,
+            400,
+            0.95,
+            True,
+            True,
+            50,
+            -1.0,
+            512,
+        ],
+        [
+            os.path.join(os.path.dirname(__file__), "data/001.glb"),
+            42,
+            100000,
+            400,
+            0.95,
+            True,
+            True,
+            50,
+            -1.0,
+            512,
+        ],
+        [
+            os.path.join(os.path.dirname(__file__), "data/002.glb"),
+            42,
+            100000,
+            400,
+            0.95,
+            True,
+            True,
+            50,
+            -1.0,
+            512,
+        ],
+        [
+            os.path.join(os.path.dirname(__file__), "data/003.glb"),
+            42,
+            100000,
+            400,
+            0.95,
+            True,
+            True,
+            50,
+            -1.0,
+            512,
+        ],
+        [
+            os.path.join(os.path.dirname(__file__), "data/004.glb"),
+            2025,
+            100000,
+            400,
+            0.95,
+            True,
+            True,
+            50,
+            -1.0,
+            512,
+        ],
     ],
     cache_examples=True,
     examples_per_page=8,

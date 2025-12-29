@@ -83,13 +83,13 @@ def get_mask(model, feats, points, point_prompt):
     prompt_coord = prompt_coord.repeat(point_num, 1) # [N, 3]
     feats_seg = torch.cat([feats, points, prompt_coord], dim=-1) # [N, 512+3+3]
 
-    # 预测mask stage-1
+    # Predict mask stage-1
     pred_mask_1 = model.seg_mlp_1(feats_seg).squeeze(-1) # [N]
     pred_mask_2 = model.seg_mlp_2(feats_seg).squeeze(-1) # [N]
     pred_mask_3 = model.seg_mlp_3(feats_seg).squeeze(-1) # [N]
     pred_mask = torch.stack([pred_mask_1, pred_mask_2, pred_mask_3], dim=-1) # [N, 3]
 
-    # 预测mask stage-2
+    # Predict mask stage-2
     feats_seg_2 = torch.cat([feats_seg, pred_mask], dim=-1) # [N, 512+3+3+3]
     feats_seg_global = model.seg_s2_mlp_g(feats_seg_2) # [N, 512]
     feats_seg_global = torch.max(feats_seg_global, dim=0).values # [512]
@@ -134,16 +134,16 @@ def mask2color(mask):
 
 def main(args):
     # load model
-    print("加载模型")
+    print("Loading model")
     model = P3SAM()
     model.load_state_dict(args.ckpt_path)
     model.eval()
     model.cuda()  
-    print("模型加载完成")
+    print("Model loaded")
 
-    print("加载数据列表")
+    print("Loading data list")
     data_list = os.listdir(args.data_dir)
-    print(f"共加载{len(data_list)}个数据")
+    print(f"Loaded {len(data_list)} items")
 
     server = viser.ViserServer(host=args.host, port=args.port)
     server.scene.set_up_direction("+y")
@@ -186,7 +186,7 @@ def main(args):
     def load_pc(use_normal=True, noise_std=0):
         clear_state()
 
-        print("加载数据")
+        print("Loading data")
         if args.data_dir is not None:
             glb_data_path = os.path.join(args.data_dir, cur_data_id[0])
         else:
@@ -206,10 +206,10 @@ def main(args):
         show_color = np.array([POINT_COLOR])
         _show_colors = np.tile(show_color, (_points.shape[0], 1))
 
-        print("预处理特征")
+        print("Preprocess features")
         _feats = get_feat(model, _points, normals)
 
-        print("PCA获取特征颜色")
+        print("PCA feature colors")
         feat_save = _feats.float().detach().cpu().numpy()
         data_scaled = feat_save / np.linalg.norm(feat_save, axis=-1, keepdims=True)
         pca = PCA(n_components=3)
@@ -229,7 +229,7 @@ def main(args):
         colors_pca[0] = _colors_pca
         feats[0] = _feats
         show_colors[0] = _show_colors
-        print("加载数据完成")
+        print("Data load complete")
 
     load_pc()
 
@@ -355,7 +355,7 @@ def main(args):
                 disth = disth[mask]
                 min_disth_idx = np.argmin(disth)
                 select_point = select_points[min_disth_idx]
-                print(f"选择点: {select_point}")
+                print(f"Selected point: {select_point}")
                 point_prompt[0] = select_point
                 add_point_prompt()
 
@@ -378,9 +378,9 @@ def main(args):
                     mask_name = "Mask-3"
                 drop_down_handle.value = mask_name
 
-                print('获取mask成功', np.sum(mask_res[0]), np.sum(mask_res[1]), np.sum(mask_res[2]))
-                print('获取iou成功', pred_iou_1, pred_iou_2, pred_iou_3)
-                print('最佳mask', best[0]+1)
+                print("Got mask", np.sum(mask_res[0]), np.sum(mask_res[1]), np.sum(mask_res[2]))
+                print("Got IoU", pred_iou_1, pred_iou_2, pred_iou_3)
+                print("Best mask", best[0] + 1)
 
                 client.scene.remove_pointer_callback()
 

@@ -16,6 +16,7 @@ from .utils.mesh_utils import (
     explode_mesh,
     fix_mesh,
 )
+from .utils.assembly import add_pin_sockets
 from .utils.misc import (
     init_from_ckpt,
     instantiate_from_config,
@@ -597,6 +598,15 @@ class PartFormerPipeline(TokenAllocMixin):
         bbox_threshold=None,
         bbox_post_process=None,
         bbox_clean_mesh_flag=True,
+        add_assembly_pins: bool = False,
+        pin_diameter: float = 3.0,
+        pin_length: float = 6.0,
+        pin_clearance: float = 0.2,
+        pin_area_per_pin: float = 2000.0,
+        pin_interface_distance: float = 0.5,
+        pin_sample_count: int = 20000,
+        pin_edge_distance: Optional[float] = None,
+        pin_boolean_engine: Optional[str] = None,
         # marching cubes
         box_v=1.01,
         octree_resolution=512,
@@ -760,6 +770,20 @@ class PartFormerPipeline(TokenAllocMixin):
             _v = out.geometry[key].vertices
             _v = _v * scale + center
             out.geometry[key].vertices = _v
+
+        if add_assembly_pins and output_type == "trimesh":
+            out = add_pin_sockets(
+                out,
+                pin_diameter=pin_diameter,
+                pin_length=pin_length,
+                clearance=pin_clearance,
+                area_per_pin=pin_area_per_pin,
+                interface_distance=pin_interface_distance,
+                sample_count=pin_sample_count,
+                edge_distance=pin_edge_distance,
+                boolean_engine=pin_boolean_engine,
+                seed=seed,
+            )
 
         if self.verbose:
             explode_object = explode_mesh(copy.deepcopy(out), explosion_scale=0.2)

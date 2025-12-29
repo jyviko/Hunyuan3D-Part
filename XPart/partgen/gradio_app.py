@@ -51,6 +51,11 @@ def run_infer(
     num_inference_steps,
     guidance_scale,
     octree_resolution,
+    add_assembly_pins,
+    pin_diameter,
+    pin_length,
+    pin_clearance,
+    pin_area_per_pin,
 ):
     """Run inference on a single mesh file."""
     pipeline = _PIPELINE
@@ -63,6 +68,11 @@ def run_infer(
     num_inference_steps = int(num_inference_steps)
     guidance_scale = float(guidance_scale)
     octree_resolution = int(octree_resolution)
+    add_assembly_pins = bool(add_assembly_pins)
+    pin_diameter = float(pin_diameter)
+    pin_length = float(pin_length)
+    pin_clearance = float(pin_clearance)
+    pin_area_per_pin = float(pin_area_per_pin)
     print(f"Running inference on {mesh_file_name} with seed {seed}")
     # Ensure deterministic behavior per request
     try:
@@ -80,6 +90,11 @@ def run_infer(
         bbox_threshold=bbox_threshold,
         bbox_post_process=bbox_post_process,
         bbox_clean_mesh_flag=bbox_clean_mesh_flag,
+        add_assembly_pins=add_assembly_pins,
+        pin_diameter=pin_diameter,
+        pin_length=pin_length,
+        pin_clearance=pin_clearance,
+        pin_area_per_pin=pin_area_per_pin,
         **additional_params,
     )
     obj_path = "tmp_obj.glb"
@@ -97,7 +112,21 @@ def _build_examples():
     data_dir = Path(__file__).resolve().parents[1] / "data"
     if not data_dir.exists():
         return []
-    default_params = [30000, 400, 0.95, True, True, 50, -1.0, 512]
+    default_params = [
+        30000,
+        400,
+        0.95,
+        True,
+        True,
+        50,
+        -1.0,
+        512,
+        False,
+        3.0,
+        6.0,
+        0.2,
+        2000.0,
+    ]
     candidates = [
         ("000.glb", 42),
         ("001.glb", 42),
@@ -140,6 +169,11 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
             gr.Number(value=50, label="Inference Steps", precision=0),
             gr.Number(value=-1.0, label="Guidance Scale"),
             gr.Number(value=512, label="Octree Resolution", precision=0),
+            gr.Checkbox(value=False, label="Add Assembly Pins"),
+            gr.Number(value=3.0, label="Pin Diameter (mm)"),
+            gr.Number(value=6.0, label="Pin Length (mm)"),
+            gr.Number(value=0.2, label="Pin Clearance (mm)"),
+            gr.Number(value=2000.0, label="Pin Area per Pin (mm²)"),
         ],
         outputs=[
             gr.Model3D(

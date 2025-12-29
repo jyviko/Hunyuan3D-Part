@@ -11,8 +11,11 @@ TV_VER="${TV_VER:-0.20.1+cu121}"
 TA_VER="${TA_VER:-2.5.1+cu121}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 
-# A100 (SM80) build constraints for flash-attn
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0}"
+# SpConv wheel package name (adjust for other CUDA builds)
+SPCONV_PKG="${SPCONV_PKG:-spconv-cu124}"
+
+# CUDA arch list for flash-attn (A100 SM80, H100 SM90)
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0;9.0}"
 export MAX_JOBS="${MAX_JOBS:-1}"
 export NINJA_FLAGS="${NINJA_FLAGS:--j1}"
 
@@ -58,32 +61,8 @@ print("cuda available:", torch.cuda.is_available())
 EOF
 
 # ---------------- core python deps ----------------
-log "Installing Python dependencies (runtime + utilities)"
-python -m pip install \
-  gradio \
-  huggingface_hub \
-  omegaconf \
-  pyyaml \
-  einops \
-  safetensors \
-  tqdm \
-  numpy \
-  scipy \
-  trimesh \
-  scikit-image \
-  pytorch_lightning \
-  pymeshlab \
-  timm \
-  numba \
-  diffusers \
-  accelerate \
-  transformers \
-  httpx \
-  joblib \
-  threadpoolctl \
-  pybind11 \
-  pillow \
-  opencv-python
+log "Installing Hunyuan3D-Part package (Sonata core deps included)"
+python -m pip install -e ".[sonata]" --find-links "${PYG_WHL_PAGE}"
 
 # ---------------- flash-attn ----------------
 log "Installing flash-attn (source build, constrained for A100)"
@@ -97,65 +76,20 @@ print("flash_attn import: OK")
 print("flash_attn version:", getattr(flash_attn, "__version__", "unknown"))
 EOF
 
+# ---------------- spconv ----------------
+log "Installing spconv (Sonata dependency)"
+python -m pip install "${SPCONV_PKG}"
+
 # ---------------- torch_scatter (+ other PyG extensions) ----------------
-log "Installing torch-scatter from PyG wheels"
-python -m pip install torch-scatter -f "${PYG_WHL_PAGE}"
-
-# Optional: common additional PyG extensions (safe if unused; skip if you want minimal)
-log "Installing additional PyG extensions (torch-sparse/cluster/spline-conv) from PyG wheels"
-python -m pip install torch-sparse torch-cluster torch-spline-conv -f "${PYG_WHL_PAGE}" || true
-
-# ---------------- install repo requirements if present ----------------
-if [[ -f "XPart/requirements.txt" ]]; then
-  log "Installing XPart requirements.txt"
-  python -m pip install -r XPart/requirements.txt
-fi
+log "Ensuring PyG extensions are installed (Sonata dependency)"
+python -m pip install torch-scatter torch-sparse torch-cluster torch-spline-conv \
+  -f "${PYG_WHL_PAGE}" || true
 
 # ---------------- sonata editable install if present ----------------
 if [[ -d "sonata" ]]; then
   log "Installing sonata in editable mode"
   (cd sonata && python -m pip install -e .)
 fi
-
-# ---------------- apply Fix B: avoid /root/sonata permission issue ----------------
-log "Patching P3-SAM/model.py to use a writable sonata download_root (Fix B)"
-python - <<'EOF'
-from pathlib import Path
-import re
-
-p = Path("P3-SAM/model.py")
-if not p.exists():
-    raise SystemExit("P3-SAM/model.py not found; cannot apply sonata download_root patch.")
-
-txt = p.read_text()
-
-# Replace hardcoded /root/sonata with ~/sonata (using pathlib)
-repls = [
-    ("download_root='/root/sonata'", "download_root=str(pathlib.Path.home() / 'sonata')"),
-    ('download_root="/root/sonata"', "download_root=str(pathlib.Path.home() / 'sonata')"),
-]
-changed = False
-for a,b in repls:
-    if a in txt:
-        txt = txt.replace(a,b)
-        changed = True
-
-if not changed:
-    # Don't fail; just inform
-    print("NOTE: Did not find hardcoded download_root='/root/sonata' in P3-SAM/model.py; skipping patch.")
-else:
-    if "import pathlib" not in txt:
-        # Insert import after the first block of imports
-        lines = txt.splitlines()
-        insert_at = 0
-        for i,l in enumerate(lines):
-            if l.startswith("import ") or l.startswith("from "):
-                insert_at = i+1
-        lines.insert(insert_at, "import pathlib")
-        txt = "\n".join(lines) + "\n"
-    p.write_text(txt)
-    print("Patched P3-SAM/model.py successfully.")
-EOF
 
 # ---------------- create cache dirs + runner ----------------
 log "Creating Hugging Face cache dirs and sonata dir"
@@ -167,17 +101,15 @@ cat > run_xpart_demo.sh <<EOF
 set -euo pipefail
 source "${VENV_DIR}/bin/activate"
 
-# Make repo modules discoverable (P3-SAM uses a non-package folder name)
-export PYTHONPATH="\$PWD/P3-SAM:\$PWD/XPart:\${PYTHONPATH:-}"
-
 # Use writable Hugging Face cache locations
 export HF_HOME="${HF_HOME}"
 export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE}"
 export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE}"
+export SONATA_ROOT="${SONATA_ROOT}"
 
 mkdir -p "${HF_HOME}" "${HUGGINGFACE_HUB_CACHE}" "${TRANSFORMERS_CACHE}" "${SONATA_ROOT}"
 
-python XPart/gradio_demo.py
+xpart-gradio
 EOF
 chmod +x run_xpart_demo.sh
 
@@ -188,4 +120,3 @@ echo
 echo "[install] If remote, use SSH port-forwarding from your laptop:"
 echo "  ssh -L 7860:localhost:7860 user@REMOTE_HOST"
 echo "  then open http://localhost:7860"
-

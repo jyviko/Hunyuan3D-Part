@@ -49,6 +49,9 @@ def run_infer(
     bbox_threshold,
     bbox_post_process,
     bbox_clean_mesh_flag,
+    bbox_uv_seed_mode,
+    bbox_uv_seed_box_size,
+    bbox_uv_seed_count,
     obj_pc_size,
     part_pc_size,
     cond_batch_size,
@@ -73,6 +76,8 @@ def run_infer(
     bbox_point_num = int(bbox_point_num)
     bbox_prompt_num = int(bbox_prompt_num)
     bbox_threshold = float(bbox_threshold)
+    bbox_uv_seed_box_size = float(bbox_uv_seed_box_size)
+    bbox_uv_seed_count = int(bbox_uv_seed_count)
     obj_pc_size = int(obj_pc_size)
     part_pc_size = int(part_pc_size)
     cond_batch_size = int(cond_batch_size)
@@ -107,6 +112,9 @@ def run_infer(
         bbox_threshold=bbox_threshold,
         bbox_post_process=bbox_post_process,
         bbox_clean_mesh_flag=bbox_clean_mesh_flag,
+        bbox_uv_seed_mode=bbox_uv_seed_mode,
+        bbox_uv_seed_box_size=bbox_uv_seed_box_size,
+        bbox_uv_seed_count=bbox_uv_seed_count,
         obj_pc_size=obj_pc_size,
         part_pc_size=part_pc_size,
         cond_batch_size=cond_batch_size,
@@ -144,6 +152,9 @@ def _build_examples(enable_examples: bool):
         0.95,
         True,
         True,
+        "off",
+        0.2,
+        1,
         10240,
         10240,
         4,
@@ -206,6 +217,13 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
             gr.Number(value=0.95, label="BBox Threshold"),
             gr.Checkbox(value=True, label="BBox Post-process"),
             gr.Checkbox(value=True, label="BBox Clean Mesh"),
+            gr.Dropdown(
+                choices=["off", "center", "random"],
+                value="off",
+                label="BBox UV Seed Mode",
+            ),
+            gr.Number(value=0.2, label="BBox UV Box Size (0-1)"),
+            gr.Number(value=1, label="BBox UV Seed Count", precision=0),
             gr.Number(value=10240, label="Object Point Count", precision=0),
             gr.Number(value=10240, label="Part Point Count", precision=0),
             gr.Number(value=4, label="Conditioning Batch Size", precision=0),

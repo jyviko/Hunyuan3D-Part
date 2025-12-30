@@ -322,6 +322,9 @@ class PartFormerPipeline(TokenAllocMixin):
         prompt_num=None,
         threshold=None,
         post_process=None,
+        uv_seed_mode=None,
+        uv_seed_box_size=None,
+        uv_seed_count=None,
         clean_mesh_flag=True,
         show_info=False,
         save_mid_res=False,
@@ -341,6 +344,9 @@ class PartFormerPipeline(TokenAllocMixin):
             prompt_num=prompt_num,
             threshold=threshold,
             post_process=post_process,
+            uv_seed_mode=uv_seed_mode,
+            uv_seed_box_size=uv_seed_box_size,
+            uv_seed_count=uv_seed_count,
             clean_mesh_flag=clean_mesh_flag,
             show_info=show_info,
             save_mid_res=save_mid_res,
@@ -441,6 +447,9 @@ class PartFormerPipeline(TokenAllocMixin):
         bbox_prompt_num=None,
         bbox_threshold=None,
         bbox_post_process=None,
+        bbox_uv_seed_mode=None,
+        bbox_uv_seed_box_size=None,
+        bbox_uv_seed_count=None,
         bbox_clean_mesh_flag=True,
     ):
         """
@@ -502,6 +511,9 @@ class PartFormerPipeline(TokenAllocMixin):
                 prompt_num=bbox_prompt_num,
                 threshold=bbox_threshold,
                 post_process=bbox_post_process,
+                uv_seed_mode=bbox_uv_seed_mode,
+                uv_seed_box_size=bbox_uv_seed_box_size,
+                uv_seed_count=bbox_uv_seed_count,
                 clean_mesh_flag=bbox_clean_mesh_flag,
             )
             print(f"Get bbox from bbox_predictor: {aabb.shape}")
@@ -617,6 +629,9 @@ class PartFormerPipeline(TokenAllocMixin):
         bbox_threshold=None,
         bbox_post_process=None,
         bbox_clean_mesh_flag=True,
+        bbox_uv_seed_mode: Optional[str] = None,
+        bbox_uv_seed_box_size: Optional[float] = None,
+        bbox_uv_seed_count: Optional[int] = None,
         obj_pc_size: int = 10240,
         part_pc_size: int = 10240,
         cond_batch_size: Optional[int] = None,
@@ -669,6 +684,9 @@ class PartFormerPipeline(TokenAllocMixin):
             bbox_prompt_num=bbox_prompt_num,
             bbox_threshold=bbox_threshold,
             bbox_post_process=bbox_post_process,
+            bbox_uv_seed_mode=bbox_uv_seed_mode,
+            bbox_uv_seed_box_size=bbox_uv_seed_box_size,
+            bbox_uv_seed_count=bbox_uv_seed_count,
             bbox_clean_mesh_flag=bbox_clean_mesh_flag,
         )
         if self.verbose:
@@ -695,10 +713,8 @@ class PartFormerPipeline(TokenAllocMixin):
         assert batch_size == 1, "Batch size > 1 is not supported yet."
         # 2. Prepare latent variables
         # TODO:allocate tokens for each parts
-        num_tokens = torch.tensor(
-            [self.allocate_tokens(x, self.vae.latent_shape[0]) for x in aabb],
-            device=device,
-        )
+        token_list = [self.allocate_tokens(x, self.vae.latent_shape[0]) for x in aabb]
+        num_tokens = torch.from_numpy(np.stack(token_list, axis=0)).to(device=device)
         latent_shape = self.vae.latent_shape
         latents = self.prepare_latents(
             num_parts, latent_shape, dtype, device, generator

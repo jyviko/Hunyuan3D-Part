@@ -915,9 +915,15 @@ def mesh_sam(
 ):
     with Timer("Load mesh"):
         model, model_parallel = model
+        uv_mesh = mesh
         if clean_mesh_flag:
-            mesh = clean_mesh(mesh)
-            mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces)
+            mesh_clean = mesh.copy()
+            mesh_clean = clean_mesh(mesh_clean)
+            mesh = trimesh.Trimesh(
+                vertices=mesh_clean.vertices, faces=mesh_clean.faces, process=False
+            )
+        else:
+            mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces, process=False)
     if show_info:
         print(f"Points: {mesh.vertices.shape[0]} Faces: {mesh.faces.shape[0]}")
 
@@ -960,7 +966,7 @@ def mesh_sam(
         fps_idx = fpsample.fps_sampling(_points, prompt_num)
         _point_prompts = _points[fps_idx]
         uv_seed_points = get_uv_seed_points(
-            mesh,
+            uv_mesh,
             center,
             scale,
             seed=seed,

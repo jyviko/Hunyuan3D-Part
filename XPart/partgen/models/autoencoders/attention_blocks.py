@@ -601,9 +601,14 @@ class PointCrossAttentionEncoder(nn.Module):
         num_latents = int(num_pts / self.downsample_ratio)
 
         # Compute the number of random and sharpedge latents
-        num_random_query = (
-            self.pc_size / (self.pc_size + self.pc_sharpedge_size) * num_latents
-        )
+        total_pc = self.pc_size + self.pc_sharpedge_size
+        if total_pc <= 0:
+            num_random_query = num_latents
+        else:
+            num_random_query = int(
+                round(self.pc_size / total_pc * num_latents)
+            )
+        num_random_query = max(min(num_random_query, num_latents), 0)
         num_sharpedge_query = num_latents - num_random_query
 
         # Split random and sharpedge surface points
@@ -619,31 +624,48 @@ class PointCrossAttentionEncoder(nn.Module):
         )
 
         # Randomly select random surface points and random query points
-        input_random_pc_size = int(num_random_query * self.downsample_ratio)
-        random_query_ratio = num_random_query / input_random_pc_size
-        idx_random_pc = torch.randperm(random_pc.shape[1], device=random_pc.device)[
-            :input_random_pc_size
-        ]
-        input_random_pc = random_pc[:, idx_random_pc, :]
-        flatten_input_random_pc = input_random_pc.view(B * input_random_pc_size, D)
-        N_down = int(flatten_input_random_pc.shape[0] / B)
-        batch_down = torch.arange(B).to(pc.device)
-        batch_down = torch.repeat_interleave(batch_down, N_down)
-        idx_query_random = fps(
-            flatten_input_random_pc, batch_down, ratio=random_query_ratio
-        )
-        query_random_pc = flatten_input_random_pc[idx_query_random].view(B, -1, D)
+        if random_pc.shape[1] == 0 or num_random_query == 0:
+            input_random_pc_size = 0
+            idx_random_pc = torch.zeros(0, dtype=torch.long, device=pc.device)
+            idx_query_random = torch.zeros(0, dtype=torch.long, device=pc.device)
+            input_random_pc = torch.zeros(B, 0, D, dtype=pc.dtype).to(pc.device)
+            query_random_pc = torch.zeros(B, 0, D, dtype=pc.dtype).to(pc.device)
+        else:
+            input_random_pc_size = int(num_random_query * self.downsample_ratio)
+            input_random_pc_size = max(input_random_pc_size, num_random_query)
+            input_random_pc_size = min(input_random_pc_size, random_pc.shape[1])
+            if input_random_pc_size < num_random_query:
+                num_random_query = input_random_pc_size
+            random_query_ratio = num_random_query / input_random_pc_size
+            idx_random_pc = torch.randperm(
+                random_pc.shape[1], device=random_pc.device
+            )[:input_random_pc_size]
+            input_random_pc = random_pc[:, idx_random_pc, :]
+            flatten_input_random_pc = input_random_pc.view(B * input_random_pc_size, D)
+            N_down = int(flatten_input_random_pc.shape[0] / B)
+            batch_down = torch.arange(B).to(pc.device)
+            batch_down = torch.repeat_interleave(batch_down, N_down)
+            idx_query_random = fps(
+                flatten_input_random_pc, batch_down, ratio=random_query_ratio
+            )
+            query_random_pc = flatten_input_random_pc[idx_query_random].view(B, -1, D)
 
         # Randomly select sharpedge surface points and sharpedge query points
         input_sharpedge_pc_size = int(num_sharpedge_query * self.downsample_ratio)
-        if input_sharpedge_pc_size == 0:
+        input_sharpedge_pc_size = max(input_sharpedge_pc_size, num_sharpedge_query)
+        input_sharpedge_pc_size = min(input_sharpedge_pc_size, sharpedge_pc.shape[1])
+        if input_sharpedge_pc_size == 0 or num_sharpedge_query == 0:
             input_sharpedge_pc = torch.zeros(B, 0, D, dtype=input_random_pc.dtype).to(
                 pc.device
             )
             query_sharpedge_pc = torch.zeros(B, 0, D, dtype=query_random_pc.dtype).to(
                 pc.device
             )
+            idx_sharpedge_pc = torch.zeros(0, dtype=torch.long, device=pc.device)
+            idx_query_sharpedge = torch.zeros(0, dtype=torch.long, device=pc.device)
         else:
+            if input_sharpedge_pc_size < num_sharpedge_query:
+                num_sharpedge_query = input_sharpedge_pc_size
             sharpedge_query_ratio = num_sharpedge_query / input_sharpedge_pc_size
             idx_sharpedge_pc = torch.randperm(
                 sharpedge_pc.shape[1], device=sharpedge_pc.device

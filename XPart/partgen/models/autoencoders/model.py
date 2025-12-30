@@ -327,6 +327,7 @@ class VolumeDecoderShapeVAE(VectsetVAE):
 
     def encode(self, surface, sample_posterior=True, return_pc_info=False):
         pc, feats = surface[:, :, :3], surface[:, :, 3:]
+        self._adjust_encoder_pc_sizes(pc)
         latents, pc_infos = self.encoder(pc, feats)
         # print(latents.shape, self.pre_kl.weight.shape)
         moments = self.pre_kl(latents)
@@ -342,11 +343,36 @@ class VolumeDecoderShapeVAE(VectsetVAE):
 
     def encode_shape(self, surface, return_pc_info=False):
         pc, feats = surface[:, :, :3], surface[:, :, 3:]
+        self._adjust_encoder_pc_sizes(pc)
         latents, pc_infos = self.encoder(pc, feats)
         if return_pc_info:
             return latents, pc_infos
         else:
             return latents
+
+    def _adjust_encoder_pc_sizes(self, pc):
+        if not hasattr(self.encoder, "pc_size") or not hasattr(
+            self.encoder, "pc_sharpedge_size"
+        ):
+            return
+        total_expected = self.encoder.pc_size + self.encoder.pc_sharpedge_size
+        n = pc.shape[1]
+        if total_expected == n:
+            return
+        if total_expected <= 0:
+            self.encoder.pc_size = n
+            self.encoder.pc_sharpedge_size = 0
+            return
+        if self.encoder.pc_sharpedge_size > 0:
+            sharp_ratio = self.encoder.pc_sharpedge_size / total_expected
+            new_sharp = int(round(n * sharp_ratio))
+            new_sharp = min(new_sharp, n)
+            new_pc = n - new_sharp
+        else:
+            new_sharp = 0
+            new_pc = n
+        self.encoder.pc_size = new_pc
+        self.encoder.pc_sharpedge_size = new_sharp
 
     def decode(self, latents):
         latents = self.post_kl(latents)

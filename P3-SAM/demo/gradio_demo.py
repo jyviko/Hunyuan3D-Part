@@ -24,12 +24,17 @@ def build_demo(ckpt_path=None):
         threshold,
         prompt_bs,
         clean_mesh_flag,
+        uv_seed_mode,
+        uv_seed_box_size,
+        uv_seed_count,
     ):
         seed = int(seed)
         point_num = int(point_num)
         prompt_num = int(prompt_num)
         prompt_bs = int(prompt_bs)
         threshold = float(threshold)
+        uv_seed_box_size = float(uv_seed_box_size)
+        uv_seed_count = int(uv_seed_count)
         np.random.seed(seed)
         mesh = trimesh.load(mesh_file_name, force="mesh", process=False)
         if post_process:
@@ -43,6 +48,9 @@ def build_demo(ckpt_path=None):
                 threshold=threshold,
                 prompt_bs=prompt_bs,
                 clean_mesh_flag=clean_mesh_flag,
+                uv_seed_mode=uv_seed_mode,
+                uv_seed_box_size=uv_seed_box_size,
+                uv_seed_count=uv_seed_count,
                 show_info=False,
             )
         else:
@@ -56,6 +64,9 @@ def build_demo(ckpt_path=None):
                 threshold=threshold,
                 prompt_bs=prompt_bs,
                 clean_mesh_flag=clean_mesh_flag,
+                uv_seed_mode=uv_seed_mode,
+                uv_seed_box_size=uv_seed_box_size,
+                uv_seed_count=uv_seed_count,
                 show_info=False,
             )
         color_map = {}
@@ -96,6 +107,9 @@ def build_demo(ckpt_path=None):
                 0.95,
                 32,
                 True,
+                "off",
+                0.2,
+                1,
             ],
             [
                 os.path.join(os.path.dirname(__file__), "assets/2.glb"),
@@ -106,6 +120,9 @@ def build_demo(ckpt_path=None):
                 0.95,
                 32,
                 True,
+                "off",
+                0.2,
+                1,
             ],
             [
                 os.path.join(os.path.dirname(__file__), "assets/3.glb"),
@@ -116,6 +133,9 @@ def build_demo(ckpt_path=None):
                 0.95,
                 32,
                 True,
+                "off",
+                0.2,
+                1,
             ],
             [
                 os.path.join(os.path.dirname(__file__), "assets/4.glb"),
@@ -126,6 +146,9 @@ def build_demo(ckpt_path=None):
                 0.95,
                 32,
                 True,
+                "off",
+                0.2,
+                1,
             ],
         ]
     if not examples:
@@ -150,6 +173,13 @@ Input a mesh and push the "submit" button to get the segmentation results.
             gr.Number(value=0.95, label="Post-process Threshold"),
             gr.Number(value=32, label="Prompt Batch Size", precision=0),
             gr.Checkbox(value=True, label="Clean Mesh"),
+            gr.Dropdown(
+                choices=["off", "center", "random"],
+                value="off",
+                label="UV Seed Mode",
+            ),
+            gr.Number(value=0.2, label="UV Center Box Size (0-1)"),
+            gr.Number(value=1, label="UV Seed Count", precision=0),
         ],
         outputs=gr.Model3D(
             clear_color=[0.0, 0.0, 0.0, 0.0], label="Segmentation Results"

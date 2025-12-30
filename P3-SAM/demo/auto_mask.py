@@ -117,6 +117,68 @@ def normalize_pc(pc):
     return pc
 
 
+def get_normalize_params(pc):
+    max_, min_ = np.max(pc, axis=0), np.min(pc, axis=0)
+    center = (max_ + min_) / 2
+    scale = (max_ - min_) / 2
+    scale = np.max(np.abs(scale))
+    return center, scale
+
+
+def get_uv_center_bbox(mesh, uv_box_size=0.2):
+    uv = getattr(getattr(mesh, "visual", None), "uv", None)
+    if uv is None or len(uv) != len(mesh.vertices):
+        return None
+    faces = mesh.faces
+    uv_faces = uv[faces]
+    uv_center = uv_faces.mean(axis=1)
+    half = uv_box_size * 0.5
+    mask = (
+        (np.abs(uv_center[:, 0] - 0.5) <= half)
+        & (np.abs(uv_center[:, 1] - 0.5) <= half)
+    )
+    if not np.any(mask):
+        return None
+    face_idx = np.where(mask)[0]
+    verts = mesh.vertices[faces[face_idx].reshape(-1)]
+    min_xyz = np.min(verts, axis=0)
+    max_xyz = np.max(verts, axis=0)
+    return min_xyz, max_xyz
+
+
+def get_uv_seed_points(
+    mesh,
+    center,
+    scale,
+    seed=42,
+    uv_seed_mode="off",
+    uv_seed_box_size=0.2,
+    uv_seed_count=1,
+    show_info=False,
+):
+    if uv_seed_mode == "off":
+        return None
+    bbox = get_uv_center_bbox(mesh, uv_box_size=uv_seed_box_size)
+    if bbox is None:
+        if show_info:
+            print("UV seed: no valid UV center bbox found.")
+        return None
+    min_xyz, max_xyz = bbox
+    rng = np.random.default_rng(seed=seed)
+    if uv_seed_mode == "center":
+        points = (min_xyz + max_xyz) / 2.0
+        points = points.reshape(1, 3)
+    elif uv_seed_mode == "random":
+        count = max(int(uv_seed_count), 1)
+        points = rng.uniform(min_xyz, max_xyz, size=(count, 3))
+    else:
+        if show_info:
+            print(f"UV seed: unknown mode {uv_seed_mode}")
+        return None
+    points = (points - center) / (scale + 1e-10)
+    return points
+
+
 @torch.no_grad()
 def get_feat(model, points, normals):
     data_dict = {
@@ -847,6 +909,9 @@ def mesh_sam(
     seed=42,
     prompt_bs=32,
     point_chunk=10000,
+    uv_seed_mode="off",
+    uv_seed_box_size=0.2,
+    uv_seed_count=1,
 ):
     with Timer("Load mesh"):
         model, model_parallel = model
@@ -865,7 +930,8 @@ def mesh_sam(
     with Timer("Sample point cloud"):
         _points, face_idx = trimesh.sample.sample_surface(mesh, point_num, seed=seed)
         _points_org = _points.copy()
-        _points = normalize_pc(_points)
+        center, scale = get_normalize_params(_points_org)
+        _points = (_points_org - center) / (scale + 1e-10)
         normals = mesh.face_normals[face_idx]
     if show_info:
         print(f"Points: {point_num} Faces: {mesh.faces.shape[0]}")
@@ -893,6 +959,24 @@ def mesh_sam(
     with Timer("FPS sample prompt points"):
         fps_idx = fpsample.fps_sampling(_points, prompt_num)
         _point_prompts = _points[fps_idx]
+        uv_seed_points = get_uv_seed_points(
+            mesh,
+            center,
+            scale,
+            seed=seed,
+            uv_seed_mode=uv_seed_mode,
+            uv_seed_box_size=uv_seed_box_size,
+            uv_seed_count=uv_seed_count,
+            show_info=show_info,
+        )
+        if uv_seed_points is not None and len(uv_seed_points) > 0:
+            if uv_seed_points.shape[0] >= prompt_num:
+                _point_prompts = uv_seed_points[:prompt_num]
+            else:
+                remain = prompt_num - uv_seed_points.shape[0]
+                _point_prompts = np.concatenate(
+                    [uv_seed_points, _point_prompts[:remain]], axis=0
+                )
     if save_mid_res:
         trimesh.points.PointCloud(_point_prompts, colors=_colors_pca[fps_idx]).export(
             os.path.join(save_path, "point_prompts_pca.glb")
@@ -1321,6 +1405,9 @@ class AutoMask:
         point_num=30000,
         prompt_num=400,
         point_chunk=10000,
+        uv_seed_mode="off",
+        uv_seed_box_size=0.2,
+        uv_seed_count=1,
         threshold=0.95,
         post_process=True,
     ):
@@ -1329,6 +1416,9 @@ class AutoMask:
         point_num: int, number of sampled points
         prompt_num: int, number of prompts
         point_chunk: int, number of points per inference chunk
+        uv_seed_mode: str, UV seed mode (off/center/random)
+        uv_seed_box_size: float, size of UV center box (0-1)
+        uv_seed_count: int, number of UV seed points (random mode)
         threshold: float, threshold
         post_process: bool, whether to post-process
         """
@@ -1341,11 +1431,14 @@ class AutoMask:
         self.point_num = point_num
         self.prompt_num = prompt_num
         self.point_chunk = point_chunk
+        self.uv_seed_mode = uv_seed_mode
+        self.uv_seed_box_size = uv_seed_box_size
+        self.uv_seed_count = uv_seed_count
         self.threshold = threshold
         self.post_process = post_process
 
     def predict_aabb(
-        self, mesh, point_num=None, prompt_num=None, point_chunk=None, threshold=None, post_process=None, save_path=None, save_mid_res=False, show_info=True, clean_mesh_flag=True, seed=42, is_parallel=True, prompt_bs=32
+        self, mesh, point_num=None, prompt_num=None, point_chunk=None, uv_seed_mode=None, uv_seed_box_size=None, uv_seed_count=None, threshold=None, post_process=None, save_path=None, save_mid_res=False, show_info=True, clean_mesh_flag=True, seed=42, is_parallel=True, prompt_bs=32
     ):
         """
         Parameters:
@@ -1353,6 +1446,9 @@ class AutoMask:
             point_num: int, number of sampled points
             prompt_num: int, number of prompts
             point_chunk: int, number of points per inference chunk
+            uv_seed_mode: str, UV seed mode (off/center/random)
+            uv_seed_box_size: float, size of UV center box (0-1)
+            uv_seed_count: int, number of UV seed points (random mode)
             threshold: float, threshold
             post_process: bool, whether to post-process
         Returns:
@@ -1362,6 +1458,13 @@ class AutoMask:
         point_num = point_num if point_num is not None else self.point_num
         prompt_num = prompt_num if prompt_num is not None else self.prompt_num
         point_chunk = point_chunk if point_chunk is not None else self.point_chunk
+        uv_seed_mode = uv_seed_mode if uv_seed_mode is not None else self.uv_seed_mode
+        uv_seed_box_size = (
+            uv_seed_box_size if uv_seed_box_size is not None else self.uv_seed_box_size
+        )
+        uv_seed_count = (
+            uv_seed_count if uv_seed_count is not None else self.uv_seed_count
+        )
         threshold = threshold if threshold is not None else self.threshold
         post_process = post_process if post_process is not None else self.post_process
         return mesh_sam(
@@ -1371,6 +1474,9 @@ class AutoMask:
             point_num=point_num,
             prompt_num=prompt_num,
             point_chunk=point_chunk,
+            uv_seed_mode=uv_seed_mode,
+            uv_seed_box_size=uv_seed_box_size,
+            uv_seed_count=uv_seed_count,
             threshold=threshold,
             post_process=post_process,
             show_info=show_info,
@@ -1398,6 +1504,9 @@ if __name__ == '__main__':
     argparser.add_argument('--point_num', type=int, default=30000, help='Number of sampled points')
     argparser.add_argument('--prompt_num', type=int, default=400, help='Number of prompts')
     argparser.add_argument('--point_chunk', type=int, default=10000, help='Points per inference chunk')
+    argparser.add_argument('--uv_seed_mode', type=str, default='off', choices=['off', 'center', 'random'], help='UV seed mode')
+    argparser.add_argument('--uv_seed_box_size', type=float, default=0.2, help='UV center box size (0-1)')
+    argparser.add_argument('--uv_seed_count', type=int, default=1, help='UV seed point count (random mode)')
     argparser.add_argument('--threshold', type=float, default=0.95, help='Threshold')
     argparser.add_argument('--post_process', type=int, default=0, help='Enable post-processing')
     argparser.add_argument('--save_mid_res', type=int, default=1, help='Save intermediate results')
@@ -1430,6 +1539,9 @@ if __name__ == '__main__':
                                                         point_num=args.point_num, 
                                                         prompt_num=args.prompt_num, 
                                                         point_chunk=args.point_chunk,
+                                                        uv_seed_mode=args.uv_seed_mode,
+                                                        uv_seed_box_size=args.uv_seed_box_size,
+                                                        uv_seed_count=args.uv_seed_count,
                                                         threshold=args.threshold, 
                                                         post_process=args.post_process, 
                                                         save_mid_res=args.save_mid_res, 
@@ -1445,6 +1557,9 @@ if __name__ == '__main__':
                                                     point_num=args.point_num, 
                                                     prompt_num=args.prompt_num, 
                                                     point_chunk=args.point_chunk,
+                                                    uv_seed_mode=args.uv_seed_mode,
+                                                    uv_seed_box_size=args.uv_seed_box_size,
+                                                    uv_seed_count=args.uv_seed_count,
                                                     threshold=args.threshold, 
                                                     post_process=args.post_process, 
                                                     save_mid_res=args.save_mid_res, 

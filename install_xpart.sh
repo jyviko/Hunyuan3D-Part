@@ -47,6 +47,20 @@ source "${VENV_DIR}/bin/activate"
 log "Upgrading installer toolchain"
 python -m pip install -U pip setuptools wheel ninja psutil packaging
 
+# ---------------- system deps (optional) ----------------
+log "Checking system OpenGL libraries for pymeshlab"
+if [[ "$(uname -s)" == "Linux" ]] && command -v apt-get >/dev/null 2>&1; then
+  if command -v sudo >/dev/null 2>&1; then
+    sudo apt-get update -y || true
+    sudo apt-get install -y libopengl0 libgl1 libglu1-mesa || true
+  else
+    apt-get update -y || true
+    apt-get install -y libopengl0 libgl1 libglu1-mesa || true
+  fi
+else
+  log "Skipping OpenGL libs install (non-Linux or apt-get unavailable)"
+fi
+
 # ---------------- torch ----------------
 log "Installing PyTorch: torch==${TORCH_VER} torchvision==${TV_VER} torchaudio==${TA_VER}"
 python -m pip install "torch==${TORCH_VER}" "torchvision==${TV_VER}" "torchaudio==${TA_VER}" \

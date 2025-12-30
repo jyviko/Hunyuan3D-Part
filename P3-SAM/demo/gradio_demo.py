@@ -128,6 +128,8 @@ def build_demo(ckpt_path=None):
                 True,
             ],
         ]
+    if not examples:
+        examples = None
 
     return gr.Interface(
         description="""

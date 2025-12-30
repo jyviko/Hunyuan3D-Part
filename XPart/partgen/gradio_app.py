@@ -173,6 +173,8 @@ def build_demo(config_path=None, device="cuda"):
         "yes",
     }
     examples = _build_examples(enable_examples)
+    if not examples:
+        examples = None
     return gr.Interface(
         description="""
 # XPart: PartFormer Inference Demo

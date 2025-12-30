@@ -1,4 +1,5 @@
 import argparse
+import os
 from pathlib import Path
 
 import gradio as gr
@@ -122,7 +123,9 @@ def run_infer(
     return obj_path, out_bbox_path, gt_bbox_path, explode_path
 
 
-def _build_examples():
+def _build_examples(enable_examples: bool):
+    if not enable_examples:
+        return []
     data_dir = Path(__file__).resolve().parents[1] / "data"
     if not data_dir.exists():
         return []
@@ -164,7 +167,12 @@ def _build_examples():
 def build_demo(config_path=None, device="cuda"):
     """Create the Gradio demo interface."""
     _ensure_pipeline(config_path, device)
-    examples = _build_examples()
+    enable_examples = os.getenv("XPART_ENABLE_EXAMPLES", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    examples = _build_examples(enable_examples)
     return gr.Interface(
         description="""
 # XPart: PartFormer Inference Demo
@@ -206,7 +214,7 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
             gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="Exploded Object"),
         ],
         examples=examples,
-        cache_examples=bool(examples),
+        cache_examples=False,
         examples_per_page=8,
         flagging_mode="never",
     )

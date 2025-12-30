@@ -79,48 +79,55 @@ def build_demo(ckpt_path=None):
         mesh_save.export(file_path)
         return file_path
 
-    examples = [
-        [
-            os.path.join(os.path.dirname(__file__), "assets/1.glb"),
-            True,
-            42,
-            30000,
-            400,
-            0.95,
-            32,
-            True,
-        ],
-        [
-            os.path.join(os.path.dirname(__file__), "assets/2.glb"),
-            True,
-            42,
-            30000,
-            400,
-            0.95,
-            32,
-            True,
-        ],
-        [
-            os.path.join(os.path.dirname(__file__), "assets/3.glb"),
-            True,
-            42,
-            30000,
-            400,
-            0.95,
-            32,
-            True,
-        ],
-        [
-            os.path.join(os.path.dirname(__file__), "assets/4.glb"),
-            True,
-            42,
-            30000,
-            400,
-            0.95,
-            32,
-            True,
-        ],
-    ]
+    enable_examples = os.getenv("P3SAM_ENABLE_EXAMPLES", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    examples = []
+    if enable_examples:
+        examples = [
+            [
+                os.path.join(os.path.dirname(__file__), "assets/1.glb"),
+                True,
+                42,
+                30000,
+                400,
+                0.95,
+                32,
+                True,
+            ],
+            [
+                os.path.join(os.path.dirname(__file__), "assets/2.glb"),
+                True,
+                42,
+                30000,
+                400,
+                0.95,
+                32,
+                True,
+            ],
+            [
+                os.path.join(os.path.dirname(__file__), "assets/3.glb"),
+                True,
+                42,
+                30000,
+                400,
+                0.95,
+                32,
+                True,
+            ],
+            [
+                os.path.join(os.path.dirname(__file__), "assets/4.glb"),
+                True,
+                42,
+                30000,
+                400,
+                0.95,
+                32,
+                True,
+            ],
+        ]
 
     return gr.Interface(
         description="""
@@ -146,6 +153,7 @@ Input a mesh and push the "submit" button to get the segmentation results.
             clear_color=[0.0, 0.0, 0.0, 0.0], label="Segmentation Results"
         ),
         examples=examples,
+        cache_examples=False,
         flagging_mode="never",
     )
 

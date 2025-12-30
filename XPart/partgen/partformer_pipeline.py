@@ -379,24 +379,41 @@ class PartFormerPipeline(TokenAllocMixin):
         part_surface_inbbox,
         object_surface,
         do_classifier_free_guidance,
+        cond_batch_size=None,
     ):
-        bsz = object_surface.shape[0]
-        cond = self.conditioner(part_surface_inbbox, object_surface)
+        def cat_recursive(a, b):
+            if isinstance(a, torch.Tensor):
+                return torch.cat([a, b], dim=0).to(self.dtype)
+            out = {}
+            for k in a.keys():
+                out[k] = cat_recursive(a[k], b[k])
+            return out
 
-        if do_classifier_free_guidance:
-            # TODO: do_classifier_free_guidance, un_cond
-            un_cond = {k: torch.zeros_like(v) for k, v in cond.items()}
+        if cond_batch_size is None or cond_batch_size <= 0:
+            cond_batch_size = part_surface_inbbox.shape[0]
 
-            def cat_recursive(a, b):
-                if isinstance(a, torch.Tensor):
-                    return torch.cat([a, b], dim=0).to(self.dtype)
-                out = {}
-                for k in a.keys():
-                    out[k] = cat_recursive(a[k], b[k])
-                return out
+        if part_surface_inbbox.shape[0] <= cond_batch_size:
+            cond = self.conditioner(part_surface_inbbox, object_surface)
+            if do_classifier_free_guidance:
+                un_cond = {k: torch.zeros_like(v) for k, v in cond.items()}
+                cond = cat_recursive(cond, un_cond)
+            return cond
 
-            cond = cat_recursive(cond, un_cond)
-        return cond
+        cond_chunks = []
+        for start in range(0, part_surface_inbbox.shape[0], cond_batch_size):
+            end = min(start + cond_batch_size, part_surface_inbbox.shape[0])
+            cond = self.conditioner(
+                part_surface_inbbox[start:end], object_surface[start:end]
+            )
+            if do_classifier_free_guidance:
+                un_cond = {k: torch.zeros_like(v) for k, v in cond.items()}
+                cond = cat_recursive(cond, un_cond)
+            cond_chunks.append(cond)
+
+        merged = cond_chunks[0]
+        for chunk in cond_chunks[1:]:
+            merged = cat_recursive(merged, chunk)
+        return merged
 
     def normalize_mesh(self, mesh):
         vertices = mesh.vertices
@@ -418,6 +435,8 @@ class PartFormerPipeline(TokenAllocMixin):
         aabb=None,
         part_surface_inbbox=None,
         seed=42,
+        obj_pc_size=81920,
+        part_pc_size=81920,
         bbox_point_num=None,
         bbox_prompt_num=None,
         bbox_threshold=None,
@@ -468,7 +487,7 @@ class PartFormerPipeline(TokenAllocMixin):
                 rng,
                 obj_surface_raw["random_surface"],
                 obj_surface_raw["sharp_surface"],
-                pc_size=81920,
+                pc_size=obj_pc_size,
                 pc_sharpedge_size=0,
                 return_sharpedge_label=True,
                 return_normal=True,
@@ -496,7 +515,7 @@ class PartFormerPipeline(TokenAllocMixin):
         # 3. load part surface in bbox
         if part_surface_inbbox is None:
             part_surface_inbbox, valid_parts_mask = sample_bbox_points_from_trimesh(
-                mesh, aabb, num_points=81920, seed=seed
+                mesh, aabb, num_points=part_pc_size, seed=seed
             )
             aabb = aabb[valid_parts_mask]
             aabb = aabb.unsqueeze(0)
@@ -598,6 +617,9 @@ class PartFormerPipeline(TokenAllocMixin):
         bbox_threshold=None,
         bbox_post_process=None,
         bbox_clean_mesh_flag=True,
+        obj_pc_size: int = 81920,
+        part_pc_size: int = 81920,
+        cond_batch_size: Optional[int] = None,
         add_assembly_pins: bool = False,
         pin_diameter: float = 3.0,
         pin_length: float = 6.0,
@@ -641,6 +663,8 @@ class PartFormerPipeline(TokenAllocMixin):
             aabb,
             part_surface_inbbox,
             seed=seed,
+            obj_pc_size=obj_pc_size,
+            part_pc_size=part_pc_size,
             bbox_point_num=bbox_point_num,
             bbox_prompt_num=bbox_prompt_num,
             bbox_threshold=bbox_threshold,
@@ -685,6 +709,7 @@ class PartFormerPipeline(TokenAllocMixin):
             part_surface_inbbox.reshape(batch_size * num_parts, N, dim),
             obj_surface.expand(batch_size * num_parts, -1, -1),
             do_classifier_free_guidance,
+            cond_batch_size=cond_batch_size,
         )
         # 4. guidance_cond for controling sampling
         guidance_cond = None

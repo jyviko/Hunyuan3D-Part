@@ -49,6 +49,9 @@ def run_infer(
     bbox_threshold,
     bbox_post_process,
     bbox_clean_mesh_flag,
+    obj_pc_size,
+    part_pc_size,
+    cond_batch_size,
     num_inference_steps,
     guidance_scale,
     octree_resolution,
@@ -70,6 +73,9 @@ def run_infer(
     bbox_point_num = int(bbox_point_num)
     bbox_prompt_num = int(bbox_prompt_num)
     bbox_threshold = float(bbox_threshold)
+    obj_pc_size = int(obj_pc_size)
+    part_pc_size = int(part_pc_size)
+    cond_batch_size = int(cond_batch_size)
     num_inference_steps = int(num_inference_steps)
     guidance_scale = float(guidance_scale)
     octree_resolution = int(octree_resolution)
@@ -101,6 +107,9 @@ def run_infer(
         bbox_threshold=bbox_threshold,
         bbox_post_process=bbox_post_process,
         bbox_clean_mesh_flag=bbox_clean_mesh_flag,
+        obj_pc_size=obj_pc_size,
+        part_pc_size=part_pc_size,
+        cond_batch_size=cond_batch_size,
         add_assembly_pins=add_assembly_pins,
         pin_diameter=pin_diameter,
         pin_length=pin_length,
@@ -135,6 +144,9 @@ def _build_examples(enable_examples: bool):
         0.95,
         True,
         True,
+        81920,
+        81920,
+        4,
         50,
         -1.0,
         512,
@@ -194,6 +206,9 @@ Upload a mesh to run XPart's PartFormer pipeline. The demo returns:
             gr.Number(value=0.95, label="BBox Threshold"),
             gr.Checkbox(value=True, label="BBox Post-process"),
             gr.Checkbox(value=True, label="BBox Clean Mesh"),
+            gr.Number(value=81920, label="Object Point Count", precision=0),
+            gr.Number(value=81920, label="Part Point Count", precision=0),
+            gr.Number(value=4, label="Conditioning Batch Size", precision=0),
             gr.Number(value=50, label="Inference Steps", precision=0),
             gr.Number(value=-1.0, label="Guidance Scale"),
             gr.Number(value=512, label="Octree Resolution", precision=0),
